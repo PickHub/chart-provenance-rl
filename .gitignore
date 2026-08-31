@@ -1,0 +1,15 @@
+.DS_Store
+.coverage
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.venv/
+__pycache__/
+*.egg-info/
+build/
+dist/
+outputs/
+runs/
+azureml-logs/
+
+# Release datasets and result bundles belong under artifacts/releases/ and are not ignored.
