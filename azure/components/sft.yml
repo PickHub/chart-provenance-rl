@@ -1,0 +1,30 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandComponent.schema.json
+name: chart_provenance_sft
+version: "1"
+type: command
+display_name: SFT Qwen3-VL
+description: Run completion-only QLoRA SFT with the vision tower frozen.
+inputs:
+  dataset:
+    type: uri_folder
+  model:
+    type: uri_folder
+  seed:
+    type: integer
+  max_steps:
+    type: integer
+    default: 100
+outputs:
+  adapter:
+    type: uri_folder
+code: ../..
+environment: azureml:chart-provenance-rl-gpu:1
+command: >-
+  python -m pip install --no-deps . &&
+  python -m chart_provenance_rl.training.sft
+  --dataset-root ${{inputs.dataset}}/benchmark
+  --model-path ${{inputs.model}}
+  --output-dir ${{outputs.adapter}}
+  --seed ${{inputs.seed}}
+  --max-steps ${{inputs.max_steps}}
+  --resume auto

@@ -19,7 +19,13 @@ from chart_provenance_rl.schema import (
     ProgramSpec,
     TableData,
 )
-from chart_provenance_rl.serialization import sha256_bytes, sha256_json, write_json, write_jsonl
+from chart_provenance_rl.serialization import (
+    load_json,
+    sha256_bytes,
+    sha256_json,
+    write_json,
+    write_jsonl,
+)
 
 CATEGORY_FAMILIES = (
     ("Q1", "Q2", "Q3", "Q4"),
@@ -45,7 +51,7 @@ def generate_dataset(
     if root.exists():
         if not overwrite:
             raise FileExistsError(f"Dataset root already exists: {root}")
-        shutil.rmtree(root)
+        _clear_generated_dataset(root)
     image_dir = root / "images"
     record_dir = root / "records"
     manifest_dir = root / "manifests"
@@ -64,7 +70,7 @@ def generate_dataset(
 
     manifest = {
         "schema_version": SCHEMA_VERSION,
-        "license": "Apache-2.0",
+        "license": "CC0-1.0",
         "model": {
             "id": MODEL_ID,
             "revision": MODEL_REVISION,
@@ -209,3 +215,38 @@ def _random_value(rng: random.Random) -> Decimal:
     whole = rng.randint(8, 96)
     fraction = rng.choice(("0", "0.25", "0.5", "0.75"))
     return Decimal(whole) + Decimal(fraction)
+
+
+def _clear_generated_dataset(root: Path) -> None:
+    if root.is_symlink():
+        raise ValueError("Refusing to overwrite a symlinked dataset root")
+    children = list(root.iterdir())
+    if not children:
+        return
+    if any(child.is_symlink() for child in children):
+        raise ValueError("Refusing to overwrite a dataset containing symlinks")
+    marker_path = root / "dataset.json"
+    if not marker_path.is_file():
+        raise ValueError("Refusing to overwrite a directory without dataset.json")
+    marker = load_json(marker_path)
+    if not isinstance(marker, dict) or marker.get("schema_version") != SCHEMA_VERSION:
+        raise ValueError("Refusing to overwrite an unrecognized dataset directory")
+    allowed = {
+        "dataset.json",
+        "images",
+        "manifests",
+        "probes",
+        "records",
+        "smoke_report.json",
+    }
+    unexpected = sorted(child.name for child in children if child.name not in allowed)
+    if unexpected:
+        raise ValueError(f"Refusing to delete unexpected dataset paths: {unexpected}")
+    for directory_name in ("images", "manifests", "probes", "records"):
+        directory = root / directory_name
+        if directory.is_dir():
+            shutil.rmtree(directory)
+    for file_name in ("dataset.json", "smoke_report.json"):
+        file_path = root / file_name
+        if file_path.is_file():
+            file_path.unlink()

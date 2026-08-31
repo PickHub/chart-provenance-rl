@@ -1,0 +1,6 @@
+$schema: https://azuremlschemas.azureedge.net/latest/environment.schema.json
+name: chart-provenance-rl-gpu
+version: "1"
+description: Pinned Qwen3-VL QLoRA and TRL runtime for the chart provenance study.
+image: mcr.microsoft.com/azureml/openmpi5.0-cuda12.8-ubuntu24.04@sha256:2f88524bcaaaeecd457236fe6ab35965a780640449402c57aab14de91f5569b9
+conda_file: conda.yml

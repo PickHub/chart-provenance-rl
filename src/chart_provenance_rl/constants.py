@@ -9,9 +9,10 @@ DEFAULT_IMAGE_SIZE = (512, 384)
 DEFAULT_DATASET_ROOT = Path("data/generated")
 
 SYSTEM_PROMPT = (
-    "Answer the chart question using only the visible image. Return one JSON object and no "
-    "other text. The object must have exactly this shape: "
-    '{"answer":"...","evidence":[{"series":"Revenue","category":"Q3"}]}. '
+    "Answer the chart question using only the visible image. Return exactly one JSON object. "
+    "The object must have this shape and these exact keys: "
+    '{"answer":"AnswerString","evidence":'
+    '[{"series":"SeriesName","category":"CategoryName"}]}. '
     "Evidence must name the visible series and category labels that are minimally sufficient "
-    f"for the answer. Use at most {MAX_EVIDENCE_REFS} evidence items."
+    "for the answer. Use at most eight evidence items."
 )

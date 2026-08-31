@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import pytest
 from PIL import Image
 
 from chart_provenance_rl.audits import audit_dataset, load_dataset_records
@@ -7,6 +8,7 @@ from chart_provenance_rl.constants import DEFAULT_IMAGE_SIZE
 from chart_provenance_rl.generation.config import smoke_config
 from chart_provenance_rl.generation.generator import generate_dataset
 from chart_provenance_rl.schema import ProgramKind
+from chart_provenance_rl.serialization import load_json
 
 
 def test_generated_dataset_passes_integrity_and_leakage_audits(
@@ -15,6 +17,7 @@ def test_generated_dataset_passes_integrity_and_leakage_audits(
     report = audit_dataset(dataset_root)
     assert report["status"] == "pass"
     assert report["answer_leak_count"] == 0
+    assert load_json(dataset_root / "dataset.json")["license"] == "CC0-1.0"
 
 
 def test_generation_is_byte_deterministic(tmp_path: Path) -> None:
@@ -65,3 +68,13 @@ def test_audit_detects_image_tampering(tmp_path: Path) -> None:
     report = audit_dataset(root)
     assert report["status"] == "fail"
     assert any("image hash mismatch" in error for error in report["errors"])
+
+
+def test_overwrite_refuses_unrecognized_directories(tmp_path: Path) -> None:
+    root = tmp_path / "not-a-dataset"
+    root.mkdir()
+    important = root / "important.txt"
+    important.write_text("keep")
+    with pytest.raises(ValueError, match="Refusing to overwrite"):
+        generate_dataset(root, smoke_config(), overwrite=True)
+    assert important.read_text() == "keep"

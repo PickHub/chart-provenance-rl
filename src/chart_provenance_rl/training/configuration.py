@@ -37,7 +37,7 @@ def grpo_config_kwargs(
         "max_completion_length": 256,
         "temperature": 1.0,
         "loss_type": "grpo",
-        "beta": 0.04,
+        "beta": 0.0,
         "use_vllm": False,
         "log_completions": False,
     }

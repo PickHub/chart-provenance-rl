@@ -1,0 +1,30 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandComponent.schema.json
+name: chart_provenance_predict
+version: "1"
+type: command
+display_name: Generate deterministic predictions
+description: Run greedy Qwen3-VL inference for a frozen model or adapter.
+inputs:
+  dataset:
+    type: uri_folder
+  model:
+    type: uri_folder
+  adapter:
+    type: uri_folder
+    optional: true
+  split:
+    type: string
+    default: test_composition
+outputs:
+  predictions:
+    type: uri_folder
+code: ../..
+environment: azureml:chart-provenance-rl-gpu:1
+command: >-
+  python -m pip install --no-deps . &&
+  python -m chart_provenance_rl.training.inference
+  --dataset-root ${{inputs.dataset}}/benchmark
+  --model-path ${{inputs.model}}
+  --split ${{inputs.split}}
+  --output ${{outputs.predictions}}/predictions.jsonl
+  $[[--adapter-path ${{inputs.adapter}}]]

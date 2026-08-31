@@ -77,12 +77,13 @@ def parse_output(raw_output: str, *, citation_cap: int = MAX_EVIDENCE_REFS) -> P
         normalized.append(normalized_reference)
     return ParsedOutput(
         json_valid=True,
-        schema_valid=True,
+        schema_valid=duplicate_count == 0,
         answer=answer,
         evidence=tuple(normalized),
         raw_evidence_count=raw_count,
         duplicate_evidence_count=duplicate_count,
         citation_cap_exceeded=False,
+        error="duplicate_evidence_reference" if duplicate_count else None,
     )
 
 

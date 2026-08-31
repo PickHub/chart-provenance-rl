@@ -108,8 +108,8 @@ def test_cli_repair_analysis_and_smoke(
 
     treatment = tmp_path / "treatment.jsonl"
     control = tmp_path / "control.jsonl"
-    treatment_rows = _seed_rows(1.0)
-    control_rows = _seed_rows(0.0)
+    treatment_rows = _seed_rows(1.0, "grpo_minimal_provenance")
+    control_rows = _seed_rows(0.0, "grpo_naive_recall")
     write_jsonl(treatment, treatment_rows)
     write_jsonl(control, control_rows)
     analysis = _run_cli(
@@ -148,9 +148,18 @@ def _run_cli(
     return value
 
 
-def _seed_rows(score: float) -> list[dict[str, str | int | float]]:
+def _seed_rows(
+    score: float,
+    method: str,
+) -> list[dict[str, str | int | float]]:
     return [
-        {"record_id": f"q{question}", "seed": seed, "joint_exact": score}
+        {
+            "record_id": f"q{question}",
+            "seed": seed,
+            "joint_exact": score,
+            "method": method,
+            "split": "test_composition",
+        }
         for seed in (17, 29, 43)
         for question in range(4)
     ]

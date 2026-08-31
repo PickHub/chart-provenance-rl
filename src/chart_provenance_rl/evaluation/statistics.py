@@ -33,8 +33,8 @@ def paired_question_test(
     control: dict[str, float],
     *,
     seed: int,
-    bootstrap_iterations: int = 2_000,
-    randomization_iterations: int = 5_000,
+    bootstrap_iterations: int = 10_000,
+    randomization_iterations: int = 10_000,
 ) -> PairedTestResult:
     if set(treatment) != set(control):
         raise ValueError("Paired tests require identical question IDs")

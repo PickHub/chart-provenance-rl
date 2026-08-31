@@ -23,6 +23,7 @@ class ModelStack:
 
 def load_model_stack(
     *,
+    model_source: str | Path = MODEL_ID,
     adapter_path: Path | None = None,
     trainable_adapter: bool = True,
     quantized: bool = True,
@@ -52,14 +53,23 @@ def load_model_stack(
         if quantized
         else None
     )
+    source = str(model_source)
+    source_kwargs: dict[str, Any] = {}
+    if source == MODEL_ID:
+        source_kwargs["revision"] = MODEL_REVISION
+        source_kwargs["local_files_only"] = local_files_only
+    else:
+        from chart_provenance_rl.training.prepare import validate_model_snapshot
+
+        validate_model_snapshot(Path(source), verify_hashes=True)
+        source_kwargs["local_files_only"] = True
     model = Qwen3VLForConditionalGeneration.from_pretrained(
-        MODEL_ID,
-        revision=MODEL_REVISION,
+        source,
         dtype=torch.float16,
         device_map="auto",
         attn_implementation="sdpa",
         quantization_config=quantization_config,
-        local_files_only=local_files_only,
+        **source_kwargs,
     )
     model.config.use_cache = False
     if quantized:
@@ -69,10 +79,9 @@ def load_model_stack(
         )
     freeze_vision_tower(model)
     processor = AutoProcessor.from_pretrained(
-        MODEL_ID,
-        revision=MODEL_REVISION,
+        source,
         padding_side="left",
-        local_files_only=local_files_only,
+        **source_kwargs,
     )
     processor.image_processor.max_pixels = DEFAULT_IMAGE_SIZE[0] * DEFAULT_IMAGE_SIZE[1]
     lora_config = LoraConfig(
@@ -106,20 +115,36 @@ def freeze_vision_tower(model: Any) -> None:
         raise RuntimeError("Vision tower freeze verification failed")
 
 
-def model_stack_smoke(*, local_files_only: bool = False) -> dict[str, Any]:
+def enforce_trainable_parameter_dtype(model: Any, dtype: Any) -> int:
+    trainable_parameters = [
+        parameter for parameter in model.parameters() if parameter.requires_grad
+    ]
+    if not trainable_parameters:
+        raise RuntimeError("Model has no trainable adapter parameters")
+    for parameter in trainable_parameters:
+        parameter.data = parameter.data.to(dtype)
+    if any(parameter.dtype != dtype for parameter in trainable_parameters):
+        raise RuntimeError(f"Trainable parameter dtype verification failed for {dtype}")
+    return sum(parameter.numel() for parameter in trainable_parameters)
+
+
+def model_stack_smoke(
+    *,
+    model_source: str | Path = MODEL_ID,
+    local_files_only: bool = False,
+) -> dict[str, Any]:
     import torch
     from peft import get_peft_model
 
-    stack = load_model_stack(local_files_only=local_files_only)
+    stack = load_model_stack(
+        model_source=model_source,
+        local_files_only=local_files_only,
+    )
     if stack.peft_config is None:
         raise RuntimeError("Model smoke requires a fresh LoRA configuration")
     model = get_peft_model(stack.model, stack.peft_config)
     freeze_vision_tower(model)
-    trainable = sum(
-        parameter.numel() for parameter in model.parameters() if parameter.requires_grad
-    )
-    if trainable == 0:
-        raise RuntimeError("LoRA construction produced no trainable parameters")
+    trainable = enforce_trainable_parameter_dtype(model, torch.float16)
     image = Image.new("RGB", DEFAULT_IMAGE_SIZE, "white")
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},

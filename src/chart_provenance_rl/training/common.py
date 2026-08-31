@@ -11,6 +11,7 @@ GPU_PACKAGES = (
     "accelerate",
     "bitsandbytes",
     "datasets",
+    "huggingface-hub",
     "mlflow",
     "peft",
     "torch",

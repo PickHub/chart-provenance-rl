@@ -9,7 +9,10 @@ from typing import Any
 from chart_provenance_rl.evaluation.parsing import completion_to_text
 from chart_provenance_rl.evaluation.rewards import RewardArm, score_reward
 from chart_provenance_rl.serialization import canonical_json
-from chart_provenance_rl.training.data import parse_provenance_sets
+from chart_provenance_rl.training.data import (
+    parse_evidence_refs,
+    parse_provenance_sets,
+)
 
 
 @dataclass
@@ -29,6 +32,7 @@ class TrainingReward:
         completion_ids: list[Any],
         expected_answer: list[str],
         minimal_provenance_json: list[str],
+        valid_evidence_json: list[str],
         record_id: list[str],
         trainer_state: Any,
         **kwargs: Any,
@@ -38,33 +42,44 @@ class TrainingReward:
             len(completions),
             len(expected_answer),
             len(minimal_provenance_json),
+            len(valid_evidence_json),
             len(record_id),
         }
         if len(lengths) != 1:
             raise ValueError("TRL reward columns must align with completions")
         selected_rewards: list[float] = []
         rollout_rows: list[dict[str, Any]] = []
-        for completion, answer, provenance_json, question_id in zip(
+        for completion, answer, provenance_json, evidence_json, question_id in zip(
             completions,
             expected_answer,
             minimal_provenance_json,
+            valid_evidence_json,
             record_id,
             strict=True,
         ):
             raw_output = completion_to_text(completion)
             provenance_sets = parse_provenance_sets(provenance_json)
-            selected = score_reward(raw_output, answer, provenance_sets, self.arm)
+            visible_evidence = parse_evidence_refs(evidence_json)
+            selected = score_reward(
+                raw_output,
+                answer,
+                provenance_sets,
+                self.arm,
+                valid_evidence_refs=visible_evidence,
+            )
             hidden = score_reward(
                 raw_output,
                 answer,
                 provenance_sets,
                 RewardArm.MINIMAL_PROVENANCE,
+                valid_evidence_refs=visible_evidence,
             )
             naive = score_reward(
                 raw_output,
                 answer,
                 provenance_sets,
                 RewardArm.NAIVE_RECALL,
+                valid_evidence_refs=visible_evidence,
             )
             selected_rewards.append(selected.reward)
             rollout_rows.append(

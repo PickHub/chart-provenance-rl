@@ -5,12 +5,22 @@ from typing import Any
 import pytest
 
 from chart_provenance_rl.evaluation.rewards import RewardArm
+from chart_provenance_rl.schema import EvidenceRef
+from chart_provenance_rl.serialization import sha256_file, write_json
 from chart_provenance_rl.training.common import resolve_resume_checkpoint
 from chart_provenance_rl.training.configuration import (
     grpo_config_kwargs,
     sft_config_kwargs,
 )
-from chart_provenance_rl.training.data import parse_provenance_sets
+from chart_provenance_rl.training.data import (
+    parse_evidence_refs,
+    parse_provenance_sets,
+)
+from chart_provenance_rl.training.model import enforce_trainable_parameter_dtype
+from chart_provenance_rl.training.prepare import (
+    MODEL_SOURCE_MANIFEST,
+    validate_model_snapshot,
+)
 from chart_provenance_rl.training.reward import TrainingReward
 
 
@@ -25,6 +35,7 @@ def test_grpo_arms_share_action_space_and_budget(tmp_path: Path) -> None:
     assert first["max_completion_length"] == 256
     assert first["temperature"] == 1.0
     assert first["use_vllm"] is False
+    assert first["beta"] == 0.0
     assert first["fp16"] is True
     assert first["bf16"] is False
 
@@ -60,6 +71,9 @@ def test_training_reward_logs_hidden_metrics(tmp_path: Path) -> None:
         completion_ids=[[]],
         expected_answer=["42"],
         minimal_provenance_json=['[[{"series":"Revenue","category":"Q3"}]]'],
+        valid_evidence_json=[
+            '[{"series":"Revenue","category":"Q3"},{"series":"Revenue","category":"Q4"}]'
+        ],
         record_id=["q1"],
         trainer_state=SimpleNamespace(global_step=3),
     )
@@ -77,6 +91,7 @@ def test_training_reward_gates_wrong_answer() -> None:
         "completion_ids": [[]],
         "expected_answer": ["42"],
         "minimal_provenance_json": ['[[{"series":"Revenue","category":"Q3"}]]'],
+        "valid_evidence_json": ['[{"series":"Revenue","category":"Q3"}]'],
         "record_id": ["q1"],
         "trainer_state": SimpleNamespace(global_step=0),
     }
@@ -89,3 +104,105 @@ def test_provenance_deserialization_is_strict() -> None:
     )
     with pytest.raises(TypeError):
         parse_provenance_sets("{}")
+    assert parse_evidence_refs('[{"series":"Revenue","category":"Q3"}]') == (
+        EvidenceRef("Revenue", "Q3"),
+    )
+
+
+def test_model_snapshot_manifest_verification(tmp_path: Path) -> None:
+    model_file = tmp_path / "config.json"
+    model_file.write_text("{}")
+    write_json(
+        tmp_path / MODEL_SOURCE_MANIFEST,
+        {
+            "model_id": "Qwen/Qwen3-VL-2B-Instruct",
+            "revision": "89644892e4d85e24eaac8bacfd4f463576704203",
+            "license": "Apache-2.0",
+            "files": [
+                {
+                    "path": "config.json",
+                    "size": model_file.stat().st_size,
+                    "sha256": sha256_file(model_file),
+                }
+            ],
+        },
+    )
+    manifest = validate_model_snapshot(tmp_path, verify_hashes=True)
+    assert manifest["files"][0]["path"] == "config.json"
+    model_file.write_text("[]")
+    with pytest.raises(ValueError, match="hash mismatch"):
+        validate_model_snapshot(tmp_path, verify_hashes=True)
+
+
+def test_model_snapshot_rejects_unmanifested_files(tmp_path: Path) -> None:
+    model_file = tmp_path / "config.json"
+    model_file.write_text("{}")
+    write_json(
+        tmp_path / MODEL_SOURCE_MANIFEST,
+        {
+            "model_id": "Qwen/Qwen3-VL-2B-Instruct",
+            "revision": "89644892e4d85e24eaac8bacfd4f463576704203",
+            "license": "Apache-2.0",
+            "files": [
+                {
+                    "path": "config.json",
+                    "size": model_file.stat().st_size,
+                    "sha256": sha256_file(model_file),
+                }
+            ],
+        },
+    )
+    (tmp_path / "extra.bin").write_bytes(b"extra")
+    with pytest.raises(ValueError, match="unmanifested"):
+        validate_model_snapshot(tmp_path, verify_hashes=True)
+
+
+def test_model_snapshot_rejects_parent_traversal(tmp_path: Path) -> None:
+    write_json(
+        tmp_path / MODEL_SOURCE_MANIFEST,
+        {
+            "model_id": "Qwen/Qwen3-VL-2B-Instruct",
+            "revision": "89644892e4d85e24eaac8bacfd4f463576704203",
+            "license": "Apache-2.0",
+            "files": [
+                {
+                    "path": "../outside",
+                    "size": 0,
+                    "sha256": "0" * 64,
+                }
+            ],
+        },
+    )
+    with pytest.raises(ValueError, match="Unsafe model snapshot path"):
+        validate_model_snapshot(tmp_path, verify_hashes=False)
+
+
+def test_trainable_adapter_dtype_is_enforced() -> None:
+    parameter = _FakeParameter()
+    count = enforce_trainable_parameter_dtype(
+        SimpleNamespace(parameters=lambda: [parameter]),
+        "float16",
+    )
+    assert count == 7
+    assert parameter.dtype == "float16"
+
+
+class _FakeData:
+    def __init__(self, dtype: str) -> None:
+        self.dtype = dtype
+
+    def to(self, dtype: str) -> "_FakeData":
+        return _FakeData(dtype)
+
+
+class _FakeParameter:
+    def __init__(self) -> None:
+        self.requires_grad = True
+        self.data = _FakeData("bfloat16")
+
+    @property
+    def dtype(self) -> str:
+        return self.data.dtype
+
+    def numel(self) -> int:
+        return 7

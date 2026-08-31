@@ -12,6 +12,7 @@ from chart_provenance_rl.evaluation.leakage import (
 )
 from chart_provenance_rl.evaluation.metrics import (
     aggregate_predictions,
+    evaluate_prediction,
     reward_hacking_attack_success,
 )
 from chart_provenance_rl.evaluation.repair import repair_output
@@ -19,7 +20,7 @@ from chart_provenance_rl.evaluation.statistics import (
     aggregate_three_seeds,
     paired_question_test,
 )
-from chart_provenance_rl.schema import BenchmarkRecord
+from chart_provenance_rl.schema import BenchmarkRecord, EvidenceRef
 
 
 def test_metrics_use_one_row_per_question(records: list[BenchmarkRecord]) -> None:
@@ -44,6 +45,20 @@ def test_cite_all_attack_exposes_reward_hacking(
 ) -> None:
     attacks = [attack for record in records for attack in attack_predictions(record)]
     assert reward_hacking_attack_success(records, attacks) == 1.0
+
+
+def test_unknown_and_duplicate_references_fail_shared_schema(
+    records: list[BenchmarkRecord],
+) -> None:
+    record = records[0]
+    unknown = f'{{"answer":"{record.answer}","evidence":[{{"series":"Bogus","category":"Bogus"}}]}}'
+    assert not evaluate_prediction(record, unknown).valid_schema
+    reference = record.table.cells()[0]
+    duplicate = (
+        f'{{"answer":"{record.answer}","evidence":['
+        f"{_reference_json(reference)},{_reference_json(reference)}]}}"
+    )
+    assert not evaluate_prediction(record, duplicate).valid_schema
 
 
 def test_question_only_image_shuffle_and_renderer_probes(
@@ -94,8 +109,8 @@ def test_paired_bootstrap_and_randomization_are_question_level() -> None:
 
 
 def test_three_seed_aggregation_and_comparison() -> None:
-    treatment = _seed_rows(1.0)
-    control = _seed_rows(0.0)
+    treatment = _seed_rows(1.0, "grpo_minimal_provenance")
+    control = _seed_rows(0.0, "grpo_naive_recall")
     summary = aggregate_three_seeds(treatment, metric="joint_exact")
     assert summary["seed_count"] == 3
     assert summary["question_count"] == 4
@@ -108,11 +123,46 @@ def test_three_seed_aggregation_and_comparison() -> None:
     assert comparison["paired_question_test"]["mean_difference"] == 1.0
     with pytest.raises(ValueError, match="exactly three seeds"):
         aggregate_three_seeds(treatment[:4], metric="joint_exact")
+    mismatched = [dict(row) for row in control]
+    mismatched[0]["seed"] = 101
+    with pytest.raises(ValueError, match="identical question/seed"):
+        compare_methods(treatment, mismatched, metric="joint_exact")
+    same_method = [dict(row, method="grpo_minimal_provenance") for row in control]
+    with pytest.raises(ValueError, match="methods must differ"):
+        compare_methods(treatment, same_method, metric="joint_exact")
+    wrong_split = [dict(row) for row in control]
+    wrong_split[0]["split"] = "validation"
+    with pytest.raises(ValueError, match="one split"):
+        compare_methods(treatment, wrong_split, metric="joint_exact")
+    missing_method = [dict(row) for row in control]
+    for row in missing_method:
+        row.pop("method")
+    with pytest.raises(TypeError, match="non-empty string method"):
+        compare_methods(treatment, missing_method, metric="joint_exact")
+    with pytest.raises(ValueError, match="Duplicate question"):
+        compare_methods(
+            [*treatment, treatment[0]],
+            [*control, control[0]],
+            metric="joint_exact",
+        )
 
 
-def _seed_rows(score: float) -> list[dict[str, str | int | float]]:
+def _seed_rows(
+    score: float,
+    method: str,
+) -> list[dict[str, str | int | float]]:
     return [
-        {"record_id": f"q{question}", "seed": seed, "joint_exact": score}
+        {
+            "record_id": f"q{question}",
+            "seed": seed,
+            "joint_exact": score,
+            "method": method,
+            "split": "test_composition",
+        }
         for seed in (17, 29, 43)
         for question in range(4)
     ]
+
+
+def _reference_json(reference: EvidenceRef) -> str:
+    return f'{{"series":"{reference.series}","category":"{reference.category}"}}'

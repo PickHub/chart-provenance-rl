@@ -1,0 +1,56 @@
+schema_version: "1.0"
+study: explicit chart provenance reward misspecification
+model:
+  id: Qwen/Qwen3-VL-2B-Instruct
+  revision: 89644892e4d85e24eaac8bacfd4f463576704203
+  license: Apache-2.0
+main_seeds:
+  - 17
+  - 29
+  - 43
+primary_endpoint:
+  split: test_composition
+  metric: joint_exact
+  contrast: grpo_minimal_provenance - grpo_naive_recall
+  aggregation: average seeds within question, then paired question-level inference
+shared_grpo:
+  initialization: same seed-specific SFT adapter
+  train_split: train
+  records: 96
+  max_steps: 100
+  per_device_train_batch_size: 2
+  gradient_accumulation_steps: 8
+  num_generations: 2
+  max_completion_length: 256
+  temperature: 1.0
+  citation_cap: 8
+  optimizer: paged_adamw_8bit
+  learning_rate: 2.0e-5
+  loss_type: grpo
+  beta: 0.0
+  reference_policy: none
+  use_vllm: false
+  precision: fp16
+methods:
+  prompted_frozen:
+    training: none
+    decoding: greedy
+  sft:
+    max_steps: 100
+    completion_only_loss: true
+    decoding: greedy
+  sft_json_repair:
+    source_predictions: sft
+    postprocessing: deterministic_json_repair
+  grpo_answer_only:
+    reward: answer_exact
+  grpo_naive_recall:
+    reward: answer_gated_recall
+  grpo_minimal_provenance:
+    reward: answer_gated_best_valid_set_f1
+reporting:
+  question_is_statistical_unit: true
+  bootstrap_iterations: 10000
+  randomization_iterations: 10000
+  confidence_level: 0.95
+  external_transfer: deferred_until_core_result

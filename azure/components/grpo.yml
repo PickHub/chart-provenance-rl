@@ -1,0 +1,40 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandComponent.schema.json
+name: chart_provenance_grpo
+version: "1"
+type: command
+display_name: Online GRPO reward arm
+description: Run one matched online GRPO arm from the shared SFT adapter.
+inputs:
+  dataset:
+    type: uri_folder
+  model:
+    type: uri_folder
+  sft_adapter:
+    type: uri_folder
+  reward_arm:
+    type: string
+    enum:
+      - answer_only
+      - naive_recall
+      - minimal_provenance
+  seed:
+    type: integer
+  max_steps:
+    type: integer
+    default: 100
+outputs:
+  adapter:
+    type: uri_folder
+code: ../..
+environment: azureml:chart-provenance-rl-gpu:1
+command: >-
+  python -m pip install --no-deps . &&
+  python -m chart_provenance_rl.training.grpo
+  --dataset-root ${{inputs.dataset}}/benchmark
+  --model-path ${{inputs.model}}
+  --sft-adapter ${{inputs.sft_adapter}}
+  --output-dir ${{outputs.adapter}}
+  --reward-arm ${{inputs.reward_arm}}
+  --seed ${{inputs.seed}}
+  --max-steps ${{inputs.max_steps}}
+  --resume auto

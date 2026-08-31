@@ -1,0 +1,26 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandComponent.schema.json
+name: chart_provenance_prepare
+version: "1"
+type: command
+display_name: Prepare benchmark and model snapshot
+description: Generate and audit the synthetic benchmark, then snapshot the immutable model revision.
+inputs:
+  profile:
+    type: string
+    default: full
+    enum:
+      - full
+      - smoke
+outputs:
+  dataset:
+    type: uri_folder
+  model:
+    type: uri_folder
+code: ../..
+environment: azureml:chart-provenance-rl-gpu:1
+command: >-
+  python -m pip install --no-deps . &&
+  python -m chart_provenance_rl.training.prepare
+  --dataset-output ${{outputs.dataset}}
+  --model-output ${{outputs.model}}
+  --profile ${{inputs.profile}}

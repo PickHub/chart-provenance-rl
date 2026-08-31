@@ -171,15 +171,13 @@ def _audit_split_design(
     }
     if train_renderers & heldout_renderers:
         errors.append("Renderer holdout overlaps training renderer families")
-    train_seeds = {(record.grammar_seed, record.config_seed) for record in train}
-    heldout_seeds = {
-        (record.grammar_seed, record.config_seed)
-        for split, records in records_by_split.items()
-        if split != "train"
-        for record in records
-    }
-    if train_seeds & heldout_seeds:
-        errors.append("Training and held-out grammar/config seeds overlap")
+    seed_owners: dict[tuple[int, int], str] = {}
+    for split, records in records_by_split.items():
+        for record in records:
+            seed_pair = (record.grammar_seed, record.config_seed)
+            prior_owner = seed_owners.setdefault(seed_pair, split)
+            if prior_owner != split:
+                errors.append(f"{prior_owner}/{split}: grammar/config seed pair overlaps")
     duplicate_records = records_by_split.get("stress_duplicate_decoy", [])
     if not any(len(record.minimal_provenance_sets) > 1 for record in duplicate_records):
         errors.append("Duplicate stress split lacks alternative valid provenance sets")
@@ -187,4 +185,4 @@ def _audit_split_design(
 
 def _answer_appears_in_prompt(record: BenchmarkRecord) -> bool:
     escaped = re.escape(record.answer.casefold())
-    return re.search(rf"(?<![\w.]){escaped}(?![\w.])", record.question.casefold()) is not None
+    return re.search(rf"(?<![\w.]){escaped}(?![\w.])", record.prompt.casefold()) is not None

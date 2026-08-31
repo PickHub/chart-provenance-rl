@@ -48,6 +48,9 @@ def load_grpo_dataset(root: Path, split: str = "train") -> Any:
                         for provenance in record.minimal_provenance_sets
                     ]
                 ),
+                "valid_evidence_json": canonical_json(
+                    [reference.to_dict() for reference in record.table.cells()]
+                ),
             }
             for record in records
         ]
@@ -75,6 +78,22 @@ def parse_provenance_sets(
     if not provenance_sets:
         raise ValueError("At least one provenance set is required")
     return tuple(provenance_sets)
+
+
+def parse_evidence_refs(serialized: str) -> tuple[EvidenceRef, ...]:
+    import json
+
+    value = json.loads(serialized)
+    if not isinstance(value, list):
+        raise TypeError("Serialized evidence references must be a list")
+    references = []
+    for reference in value:
+        if not isinstance(reference, dict):
+            raise TypeError("Evidence references must be objects")
+        references.append(EvidenceRef.from_dict(reference))
+    if not references:
+        raise ValueError("Visible evidence universe must not be empty")
+    return tuple(references)
 
 
 def _records(root: Path, split: str) -> list[BenchmarkRecord]:

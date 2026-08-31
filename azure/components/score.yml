@@ -1,0 +1,36 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandComponent.schema.json
+name: chart_provenance_score
+version: "1"
+type: command
+display_name: Score chart provenance predictions
+description: Compute question-level hidden metrics and aggregate results.
+inputs:
+  dataset:
+    type: uri_folder
+  predictions:
+    type: uri_folder
+  split:
+    type: string
+    default: test_composition
+  method:
+    type: string
+  seed:
+    type: integer
+  repair:
+    type: boolean
+    default: false
+outputs:
+  results:
+    type: uri_folder
+code: ../..
+environment: azureml:chart-provenance-rl-gpu:1
+command: >-
+  python -m pip install --no-deps . &&
+  python -m chart_provenance_rl.evaluation.job
+  --dataset-root ${{inputs.dataset}}/benchmark
+  --predictions ${{inputs.predictions}}/predictions.jsonl
+  --split ${{inputs.split}}
+  --method ${{inputs.method}}
+  --seed ${{inputs.seed}}
+  --repair ${{inputs.repair}}
+  --output-dir ${{outputs.results}}

@@ -1,0 +1,10 @@
+cff-version: 1.2.0
+message: "If you use this artifact, cite the repository and the exact release commit."
+title: "Chart provenance reward misspecification"
+type: software
+authors:
+  - name: PickHub
+repository-code: "https://github.com/PickHub/chart-provenance-rl"
+license: Apache-2.0
+version: 0.1.0
+date-released: 2026-08-31

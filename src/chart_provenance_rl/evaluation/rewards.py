@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
 
 from chart_provenance_rl.constants import MAX_EVIDENCE_REFS
@@ -43,9 +43,18 @@ def score_reward(
     arm: RewardArm,
     *,
     citation_cap: int = MAX_EVIDENCE_REFS,
+    valid_evidence_refs: tuple[EvidenceRef, ...] | None = None,
 ) -> RewardBreakdown:
     parsed = parse_output(raw_output, citation_cap=citation_cap)
     empty_score = EvidenceScore(0.0, 0.0, 0.0, False, 0, 0, 0)
+    if parsed.schema_valid and valid_evidence_refs is not None:
+        visible_keys = {evidence_key(reference) for reference in valid_evidence_refs}
+        if any(evidence_key(reference) not in visible_keys for reference in parsed.evidence):
+            parsed = replace(
+                parsed,
+                schema_valid=False,
+                error="unknown_evidence_reference",
+            )
     if not parsed.schema_valid or parsed.answer is None:
         return RewardBreakdown(arm, 0.0, False, empty_score, 0, parsed)
     answer_exact = canonical_answer(parsed.answer) == canonical_answer(expected_answer)
@@ -80,6 +89,7 @@ def score_record(
         record.answer,
         record.minimal_provenance_sets,
         arm,
+        valid_evidence_refs=record.table.cells(),
     )
 
 

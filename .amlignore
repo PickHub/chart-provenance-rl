@@ -1,0 +1,15 @@
+.git
+.git/
+.github/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.venv/
+__pycache__/
+artifacts/
+data/
+dist/
+outputs/
+runs/
+tests/
+.coverage

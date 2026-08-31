@@ -7,6 +7,7 @@ from typing import Any
 
 from chart_provenance_rl.analysis import compare_methods
 from chart_provenance_rl.audits import audit_dataset, load_dataset_records
+from chart_provenance_rl.constants import MODEL_ID
 from chart_provenance_rl.evaluation.attacks import attack_predictions
 from chart_provenance_rl.evaluation.metrics import aggregate_predictions
 from chart_provenance_rl.evaluation.repair import repair_output
@@ -77,6 +78,7 @@ def _parser() -> argparse.ArgumentParser:
     smoke.set_defaults(handler=_smoke)
 
     model_smoke = subparsers.add_parser("model-smoke")
+    model_smoke.add_argument("--model-path", type=Path)
     model_smoke.add_argument("--local-files-only", action="store_true")
     model_smoke.set_defaults(handler=_model_smoke)
     return parser
@@ -150,7 +152,10 @@ def _smoke(args: argparse.Namespace) -> dict[str, Any]:
 def _model_smoke(args: argparse.Namespace) -> dict[str, Any]:
     from chart_provenance_rl.training.model import model_stack_smoke
 
-    return model_stack_smoke(local_files_only=args.local_files_only)
+    return model_stack_smoke(
+        model_source=args.model_path if args.model_path else MODEL_ID,
+        local_files_only=args.local_files_only,
+    )
 
 
 def _split_records(dataset: Path, split: str) -> list[BenchmarkRecord]:

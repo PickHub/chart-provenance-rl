@@ -1,0 +1,221 @@
+$schema: https://azuremlschemas.azureedge.net/latest/pipelineJob.schema.json
+type: pipeline
+display_name: chart-provenance-rl
+description: One matched seed of SFT, three GRPO reward arms, and hidden evaluation.
+experiment_name: chart-provenance-rl
+inputs:
+  profile: full
+  seed: 17
+  sft_steps: 100
+  grpo_steps: 100
+  evaluation_split: test_composition
+outputs:
+  dataset:
+    mode: rw_mount
+  model_snapshot:
+    mode: rw_mount
+  sft_adapter:
+    mode: rw_mount
+  grpo_answer_adapter:
+    mode: rw_mount
+  grpo_naive_adapter:
+    mode: rw_mount
+  grpo_minimal_adapter:
+    mode: rw_mount
+  prompted_results:
+    mode: upload
+  sft_results:
+    mode: upload
+  sft_repaired_results:
+    mode: upload
+  grpo_answer_results:
+    mode: upload
+  grpo_naive_results:
+    mode: upload
+  grpo_minimal_results:
+    mode: upload
+settings:
+  continue_on_step_failure: false
+  default_datastore: azureml:workspaceblobstore
+jobs:
+  prepare:
+    type: command
+    component: ./components/prepare.yml
+    compute: azureml:serverless
+    inputs:
+      profile: ${{parent.inputs.profile}}
+    outputs:
+      dataset: ${{parent.outputs.dataset}}
+      model: ${{parent.outputs.model_snapshot}}
+  sft:
+    type: command
+    component: ./components/sft.yml
+    compute: azureml:gpu-t4-dedicated
+    inputs:
+      dataset: ${{parent.jobs.prepare.outputs.dataset}}
+      model: ${{parent.jobs.prepare.outputs.model}}
+      seed: ${{parent.inputs.seed}}
+      max_steps: ${{parent.inputs.sft_steps}}
+    outputs:
+      adapter: ${{parent.outputs.sft_adapter}}
+  grpo_answer:
+    type: command
+    component: ./components/grpo.yml
+    compute: azureml:gpu-t4-dedicated
+    inputs:
+      dataset: ${{parent.jobs.prepare.outputs.dataset}}
+      model: ${{parent.jobs.prepare.outputs.model}}
+      sft_adapter: ${{parent.jobs.sft.outputs.adapter}}
+      reward_arm: answer_only
+      seed: ${{parent.inputs.seed}}
+      max_steps: ${{parent.inputs.grpo_steps}}
+    outputs:
+      adapter: ${{parent.outputs.grpo_answer_adapter}}
+  grpo_naive:
+    type: command
+    component: ./components/grpo.yml
+    compute: azureml:gpu-t4-dedicated
+    inputs:
+      dataset: ${{parent.jobs.prepare.outputs.dataset}}
+      model: ${{parent.jobs.prepare.outputs.model}}
+      sft_adapter: ${{parent.jobs.sft.outputs.adapter}}
+      reward_arm: naive_recall
+      seed: ${{parent.inputs.seed}}
+      max_steps: ${{parent.inputs.grpo_steps}}
+    outputs:
+      adapter: ${{parent.outputs.grpo_naive_adapter}}
+  grpo_minimal:
+    type: command
+    component: ./components/grpo.yml
+    compute: azureml:gpu-t4-dedicated
+    inputs:
+      dataset: ${{parent.jobs.prepare.outputs.dataset}}
+      model: ${{parent.jobs.prepare.outputs.model}}
+      sft_adapter: ${{parent.jobs.sft.outputs.adapter}}
+      reward_arm: minimal_provenance
+      seed: ${{parent.inputs.seed}}
+      max_steps: ${{parent.inputs.grpo_steps}}
+    outputs:
+      adapter: ${{parent.outputs.grpo_minimal_adapter}}
+  predict_prompted:
+    type: command
+    component: ./components/predict.yml
+    compute: azureml:gpu-t4-dedicated
+    inputs:
+      dataset: ${{parent.jobs.prepare.outputs.dataset}}
+      model: ${{parent.jobs.prepare.outputs.model}}
+      split: ${{parent.inputs.evaluation_split}}
+  score_prompted:
+    type: command
+    component: ./components/score.yml
+    compute: azureml:serverless
+    inputs:
+      dataset: ${{parent.jobs.prepare.outputs.dataset}}
+      predictions: ${{parent.jobs.predict_prompted.outputs.predictions}}
+      split: ${{parent.inputs.evaluation_split}}
+      method: prompted_frozen
+      seed: ${{parent.inputs.seed}}
+      repair: false
+    outputs:
+      results: ${{parent.outputs.prompted_results}}
+  predict_sft:
+    type: command
+    component: ./components/predict.yml
+    compute: azureml:gpu-t4-dedicated
+    inputs:
+      dataset: ${{parent.jobs.prepare.outputs.dataset}}
+      model: ${{parent.jobs.prepare.outputs.model}}
+      adapter: ${{parent.jobs.sft.outputs.adapter}}
+      split: ${{parent.inputs.evaluation_split}}
+  score_sft:
+    type: command
+    component: ./components/score.yml
+    compute: azureml:serverless
+    inputs:
+      dataset: ${{parent.jobs.prepare.outputs.dataset}}
+      predictions: ${{parent.jobs.predict_sft.outputs.predictions}}
+      split: ${{parent.inputs.evaluation_split}}
+      method: sft
+      seed: ${{parent.inputs.seed}}
+      repair: false
+    outputs:
+      results: ${{parent.outputs.sft_results}}
+  score_sft_repaired:
+    type: command
+    component: ./components/score.yml
+    compute: azureml:serverless
+    inputs:
+      dataset: ${{parent.jobs.prepare.outputs.dataset}}
+      predictions: ${{parent.jobs.predict_sft.outputs.predictions}}
+      split: ${{parent.inputs.evaluation_split}}
+      method: sft_json_repair
+      seed: ${{parent.inputs.seed}}
+      repair: true
+    outputs:
+      results: ${{parent.outputs.sft_repaired_results}}
+  predict_grpo_answer:
+    type: command
+    component: ./components/predict.yml
+    compute: azureml:gpu-t4-dedicated
+    inputs:
+      dataset: ${{parent.jobs.prepare.outputs.dataset}}
+      model: ${{parent.jobs.prepare.outputs.model}}
+      adapter: ${{parent.jobs.grpo_answer.outputs.adapter}}
+      split: ${{parent.inputs.evaluation_split}}
+  score_grpo_answer:
+    type: command
+    component: ./components/score.yml
+    compute: azureml:serverless
+    inputs:
+      dataset: ${{parent.jobs.prepare.outputs.dataset}}
+      predictions: ${{parent.jobs.predict_grpo_answer.outputs.predictions}}
+      split: ${{parent.inputs.evaluation_split}}
+      method: grpo_answer_only
+      seed: ${{parent.inputs.seed}}
+      repair: false
+    outputs:
+      results: ${{parent.outputs.grpo_answer_results}}
+  predict_grpo_naive:
+    type: command
+    component: ./components/predict.yml
+    compute: azureml:gpu-t4-dedicated
+    inputs:
+      dataset: ${{parent.jobs.prepare.outputs.dataset}}
+      model: ${{parent.jobs.prepare.outputs.model}}
+      adapter: ${{parent.jobs.grpo_naive.outputs.adapter}}
+      split: ${{parent.inputs.evaluation_split}}
+  score_grpo_naive:
+    type: command
+    component: ./components/score.yml
+    compute: azureml:serverless
+    inputs:
+      dataset: ${{parent.jobs.prepare.outputs.dataset}}
+      predictions: ${{parent.jobs.predict_grpo_naive.outputs.predictions}}
+      split: ${{parent.inputs.evaluation_split}}
+      method: grpo_naive_recall
+      seed: ${{parent.inputs.seed}}
+      repair: false
+    outputs:
+      results: ${{parent.outputs.grpo_naive_results}}
+  predict_grpo_minimal:
+    type: command
+    component: ./components/predict.yml
+    compute: azureml:gpu-t4-dedicated
+    inputs:
+      dataset: ${{parent.jobs.prepare.outputs.dataset}}
+      model: ${{parent.jobs.prepare.outputs.model}}
+      adapter: ${{parent.jobs.grpo_minimal.outputs.adapter}}
+      split: ${{parent.inputs.evaluation_split}}
+  score_grpo_minimal:
+    type: command
+    component: ./components/score.yml
+    compute: azureml:serverless
+    inputs:
+      dataset: ${{parent.jobs.prepare.outputs.dataset}}
+      predictions: ${{parent.jobs.predict_grpo_minimal.outputs.predictions}}
+      split: ${{parent.inputs.evaluation_split}}
+      method: grpo_minimal_provenance
+      seed: ${{parent.inputs.seed}}
+      repair: false
+    outputs:
+      results: ${{parent.outputs.grpo_minimal_results}}

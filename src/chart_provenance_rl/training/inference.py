@@ -20,6 +20,7 @@ def main() -> None:
     args = _parser().parse_args()
     predict(
         dataset_root=args.dataset_root,
+        model_source=args.model_path if args.model_path else MODEL_ID,
         split=args.split,
         output=args.output,
         adapter_path=args.adapter_path,
@@ -31,6 +32,7 @@ def main() -> None:
 def predict(
     *,
     dataset_root: Path,
+    model_source: str | Path,
     split: str,
     output: Path,
     adapter_path: Path | None,
@@ -47,6 +49,7 @@ def predict(
     if limit is not None:
         records = records[:limit]
     stack = load_model_stack(
+        model_source=model_source,
         adapter_path=adapter_path,
         trainable_adapter=False,
     )
@@ -93,6 +96,7 @@ def predict(
                 "prediction": prediction,
                 "model_id": MODEL_ID,
                 "model_revision": MODEL_REVISION,
+                "model_source": str(model_source),
                 "adapter_path": str(adapter_path) if adapter_path else None,
                 "decoding": "greedy",
             }
@@ -103,6 +107,7 @@ def predict(
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run deterministic Qwen3-VL benchmark inference.")
     parser.add_argument("--dataset-root", type=Path, required=True)
+    parser.add_argument("--model-path", type=Path)
     parser.add_argument("--split", required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--adapter-path", type=Path)

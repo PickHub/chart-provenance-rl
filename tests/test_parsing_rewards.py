@@ -16,15 +16,22 @@ from chart_provenance_rl.serialization import canonical_json
 GOLD = ((EvidenceRef("Revenue", "Q3"),),)
 
 
-def test_strict_parser_normalizes_and_deduplicates() -> None:
+def test_strict_parser_normalizes_evidence() -> None:
+    parsed = parse_output('{"answer":"12.0","evidence":[{"series":" Revenue ","category":" Q3 "}]}')
+    assert parsed.schema_valid
+    assert parsed.evidence == (EvidenceRef("Revenue", "Q3"),)
+
+
+def test_duplicate_evidence_is_deduplicated_and_rejected() -> None:
     parsed = parse_output(
         '{"answer":"12.0","evidence":['
-        '{"series":" Revenue ","category":"Q3"},'
+        '{"series":"Revenue","category":"Q3"},'
         '{"series":"revenue","category":" Q3 "}]}'
     )
-    assert parsed.schema_valid
-    assert parsed.duplicate_evidence_count == 1
     assert parsed.evidence == (EvidenceRef("Revenue", "Q3"),)
+    assert parsed.duplicate_evidence_count == 1
+    assert not parsed.schema_valid
+    assert parsed.error == "duplicate_evidence_reference"
 
 
 @pytest.mark.parametrize(

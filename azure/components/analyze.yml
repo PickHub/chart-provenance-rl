@@ -1,0 +1,26 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandComponent.schema.json
+name: chart_provenance_analyze
+version: "1"
+type: command
+display_name: Analyze three-seed comparison
+description: Run paired question-level bootstrap and randomization analysis.
+inputs:
+  treatment:
+    type: uri_file
+  control:
+    type: uri_file
+  metric:
+    type: string
+    default: joint_exact
+outputs:
+  report:
+    type: uri_folder
+code: ../..
+environment: azureml:chart-provenance-rl-gpu:1
+command: >-
+  python -m pip install --no-deps . &&
+  python -m chart_provenance_rl.cli analyze
+  --treatment ${{inputs.treatment}}
+  --control ${{inputs.control}}
+  --metric ${{inputs.metric}}
+  --output ${{outputs.report}}/analysis.json
