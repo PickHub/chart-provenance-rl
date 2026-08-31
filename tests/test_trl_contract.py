@@ -44,14 +44,15 @@ def test_pinned_trl_vlm_collator_and_reward_kwargs_contract(
     assert "prompts=prompts" in reward_source
     assert "completions=completions" in reward_source
     assert "completion_ids=completion_ids_list" in reward_source
-    assert GRPOConfig().remove_unused_columns is False
-    config = GRPOConfig(
-        **grpo_config_kwargs(
-            Path("/tmp/chart-provenance-contract"),
-            seed=17,
-            max_steps=100,
-        )
+    config_kwargs = grpo_config_kwargs(
+        Path("/tmp/chart-provenance-contract"),
+        seed=17,
+        max_steps=100,
     )
+    config_kwargs["use_cpu"] = True
+    config_kwargs["fp16"] = False
+    config = GRPOConfig(**config_kwargs)
+    assert config.remove_unused_columns is False
     assert config.loss_type == "dr_grpo"
     assert config.scale_rewards == "none"
     dataset = load_sft_dataset(dataset_root)
