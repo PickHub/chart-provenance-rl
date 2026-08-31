@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import json
+import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
 import pytest
 
 from chart_provenance_rl.evaluation.confirmatory import (
+    _valid_time_range,
     run_confirmatory_analysis,
 )
 from chart_provenance_rl.evaluation.rollouts import (
@@ -13,7 +17,12 @@ from chart_provenance_rl.evaluation.rollouts import (
     bind_completed_rollout_artifact,
     reconcile_rollout_log,
 )
-from chart_provenance_rl.serialization import load_jsonl, write_json, write_jsonl
+from chart_provenance_rl.serialization import (
+    load_jsonl,
+    sha256_json,
+    write_json,
+    write_jsonl,
+)
 
 SEEDS = (17, 29, 43)
 
@@ -76,25 +85,50 @@ def test_confirmatory_throughput_failure_is_explicit(
     tmp_path: Path,
 ) -> None:
     paths = _write_confirmatory_artifacts(tmp_path)
-    throughput = {
-        "hardware": "Standard_NC4as_T4_v3",
-        "runs": [
-            {
-                "seed": seed,
-                "stage": stage,
-                "status": "failed" if seed == 43 else "completed",
-                "steps": 50 if seed == 43 else 100,
-                "wall_seconds": 3600,
-            }
-            for seed in SEEDS
-            for stage in ("sft", "naive_recall", "minimal_provenance")
-        ],
-    }
+    throughput = _throughput_report()
+    for run in throughput["runs"]:
+        if run["seed"] == 43:
+            run["status"] = "failed"
+            run["steps"] = 50
+    throughput["collection_sha256"] = _collection_sha256(throughput)
     write_json(paths["throughput_path"], throughput)
     report = run_confirmatory_analysis(**paths)
     assert report["status"] == "fail"
     criterion = {item["name"]: item for item in report["criteria"]}["t4_three_seed_throughput"]
     assert criterion["status"] == "fail"
+
+
+def test_confirmatory_rejects_self_attested_or_tampered_throughput(
+    tmp_path: Path,
+) -> None:
+    paths = _write_confirmatory_artifacts(tmp_path / "self-attested")
+    write_json(
+        paths["throughput_path"],
+        {"hardware": "Standard_NC4as_T4_v3", "runs": []},
+    )
+    report = run_confirmatory_analysis(**paths)
+    assert report["status"] == "fail"
+    assert "Azure ML collector" in report["artifact_validation_error"]
+
+    paths = _write_confirmatory_artifacts(tmp_path / "tampered")
+    throughput = _throughput_report()
+    throughput["runs"][0]["wall_seconds"] = 1
+    write_json(paths["throughput_path"], throughput)
+    report = run_confirmatory_analysis(**paths)
+    assert report["status"] == "fail"
+    assert "identity hash" in report["artifact_validation_error"]
+
+
+def test_throughput_time_ranges_require_consistent_zoned_duration() -> None:
+    valid = {
+        "start_time": "2026-08-31T00:00:00+00:00",
+        "end_time": "2026-08-31T01:00:00+00:00",
+        "wall_seconds": 3600,
+    }
+    assert _valid_time_range(valid)
+    assert not _valid_time_range({**valid, "wall_seconds": 1})
+    assert not _valid_time_range({**valid, "start_time": "not-a-time"})
+    assert not _valid_time_range({**valid, "start_time": "2026-08-31T00:00:00"})
 
 
 def test_confirmatory_rejects_truncated_rollout_trajectory(
@@ -275,6 +309,50 @@ def test_completed_rollout_is_bound_to_adapter_weights(tmp_path: Path) -> None:
         )
 
 
+def test_confirm_cli_exit_codes_follow_report_status(tmp_path: Path) -> None:
+    passing = _write_confirmatory_artifacts(tmp_path / "pass")
+    pass_result = subprocess.run(
+        _confirm_command(passing, tmp_path / "pass-report.json"),
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert pass_result.returncode == 0
+    assert json.loads(pass_result.stdout)["status"] == "pass"
+
+    failing = _write_confirmatory_artifacts(tmp_path / "fail")
+    write_jsonl(
+        failing["naive_path"],
+        _question_rows(
+            "grpo_naive_recall",
+            joint=0.0,
+            cite_all=0.05,
+        ),
+    )
+    fail_result = subprocess.run(
+        _confirm_command(failing, tmp_path / "fail-report.json"),
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert fail_result.returncode == 1
+    assert json.loads(fail_result.stdout)["status"] == "fail"
+
+    incomplete = _write_confirmatory_artifacts(tmp_path / "incomplete")
+    incomplete["throughput_path"].unlink()
+    incomplete_result = subprocess.run(
+        _confirm_command(
+            incomplete,
+            tmp_path / "incomplete-report.json",
+        ),
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert incomplete_result.returncode == 2
+    assert json.loads(incomplete_result.stdout)["status"] == "incomplete"
+
+
 def _write_confirmatory_artifacts(
     root: Path,
 ) -> dict[str, Any]:
@@ -330,36 +408,7 @@ def _write_confirmatory_artifacts(
             },
         },
     )
-    write_json(
-        throughput,
-        {
-            "hardware": "Standard_NC4as_T4_v3",
-            "runs": [
-                {
-                    "seed": seed,
-                    "stage": stage,
-                    "status": "completed",
-                    "steps": 100,
-                    "max_steps": 100,
-                    "wall_seconds": 3600,
-                    "run_manifest_sha256": _run_hash_for_stage(
-                        stage,
-                        seed,
-                    ),
-                    "adapter_artifact_sha256": _adapter_hash_for_stage(
-                        stage,
-                        seed,
-                    ),
-                }
-                for seed in SEEDS
-                for stage in (
-                    "sft",
-                    "naive_recall",
-                    "minimal_provenance",
-                )
-            ],
-        },
-    )
+    write_json(throughput, _throughput_report())
     write_jsonl(rollouts, _rollout_rows())
     return {
         "sft_path": sft,
@@ -371,6 +420,36 @@ def _write_confirmatory_artifacts(
         "throughput_path": throughput,
         "rollout_paths": [rollouts],
     }
+
+
+def _confirm_command(
+    paths: dict[str, Any],
+    output: Path,
+) -> list[str]:
+    return [
+        sys.executable,
+        "-m",
+        "chart_provenance_rl.cli",
+        "confirm",
+        "--sft",
+        str(paths["sft_path"]),
+        "--naive",
+        str(paths["naive_path"]),
+        "--minimal",
+        str(paths["minimal_path"]),
+        "--question-only",
+        str(paths["question_only_path"]),
+        "--shuffled",
+        str(paths["shuffled_path"]),
+        "--dataset-audit",
+        str(paths["audit_path"]),
+        "--throughput",
+        str(paths["throughput_path"]),
+        "--rollout-diagnostics",
+        *(str(path) for path in paths["rollout_paths"]),
+        "--output",
+        str(output),
+    ]
 
 
 def _question_rows(
@@ -495,3 +574,67 @@ def _adapter_hash_for_stage(stage: str, seed: int) -> str:
         "minimal_provenance": "grpo_minimal_provenance",
     }
     return _adapter_hash(methods[stage], seed)
+
+
+def _throughput_report() -> dict[str, Any]:
+    component_names = {
+        "sft": "sft",
+        "naive_recall": "grpo_naive",
+        "minimal_provenance": "grpo_minimal",
+    }
+    report: dict[str, Any] = {
+        "schema_version": "1.0",
+        "evidence_source": "azure_ml_v2_cli",
+        "compute": {
+            "name": "gpu-t4-dedicated",
+            "size": "Standard_NC4as_T4_v3",
+        },
+        "pipeline_jobs": [
+            {
+                "name": f"pipeline-{seed}",
+                "status": "completed",
+                "seed": seed,
+            }
+            for seed in SEEDS
+        ],
+        "git_commit": "f" * 40,
+        "source_sha256": "7" * 64,
+        "dataset_manifest_sha256": "d" * 64,
+        "runs": [
+            {
+                "seed": seed,
+                "stage": stage,
+                "status": "completed",
+                "steps": 100,
+                "max_steps": 100,
+                "wall_seconds": 3600.0,
+                "parent_job_name": f"pipeline-{seed}",
+                "job_name": f"{component_names[stage]}-{seed}",
+                "component_name": component_names[stage],
+                "compute": "gpu-t4-dedicated",
+                "compute_size": "Standard_NC4as_T4_v3",
+                "start_time": "2026-08-31T00:00:00+00:00",
+                "end_time": "2026-08-31T01:00:00+00:00",
+                "git_commit": "f" * 40,
+                "source_sha256": "7" * 64,
+                "dataset_manifest_sha256": "d" * 64,
+                "training_config_sha256": ("8" * 64 if stage == "sft" else "9" * 64),
+                "run_manifest_sha256": _run_hash_for_stage(
+                    stage,
+                    seed,
+                ),
+                "adapter_artifact_sha256": _adapter_hash_for_stage(
+                    stage,
+                    seed,
+                ),
+            }
+            for seed in SEEDS
+            for stage in ("sft", "naive_recall", "minimal_provenance")
+        ],
+    }
+    report["collection_sha256"] = _collection_sha256(report)
+    return report
+
+
+def _collection_sha256(report: dict[str, Any]) -> str:
+    return sha256_json({key: value for key, value in report.items() if key != "collection_sha256"})

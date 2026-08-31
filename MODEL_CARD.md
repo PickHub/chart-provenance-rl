@@ -24,6 +24,9 @@ The pipeline can produce:
 - answer-only, naive-recall, and minimal-provenance online-GRPO adapters initialized
   from that exact SFT adapter.
 
+The answer-only arm is still strict-contract gated: malformed or citation-invalid JSON
+receives zero even when its recoverable answer string is correct.
+
 No adapter is published and no run result exists yet.
 
 ## Adaptation

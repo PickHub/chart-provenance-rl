@@ -73,17 +73,19 @@ count, temperature, and optimization budget. Only the scalar reward changes.
 Let `EM` be answer exact match and score evidence against the best valid minimal set:
 
 ```text
-answer-only = EM
+answer-only = schema_valid * EM
 naive       = EM * (0.5 + 0.5 * recall)
 minimal     = EM * (0.5 + 0.5 * F1)
 ```
 
-Malformed output and citation-cap violations receive zero. Both evidence rewards are
-answer-gated and lie in `[0, 1]`. The naive arm omits precision, so an exact minimal set
-and every full-recall superset tie at reward 1.0. It therefore permits and can reinforce
-coverage hedging under citation uncertainty, but does not by itself force cite-all.
-The minimal arm resolves that indifference through F1 precision. A separate
-overcitation subtraction is not used because it would change reward scale too.
+Malformed output and citation-cap violations receive zero in every arm. The
+answer-only ablation therefore shares the same parser/action-space contract rather
+than measuring unconstrained answer text. Both evidence rewards are answer-gated and
+lie in `[0, 1]`. The naive arm omits precision, so an exact minimal set and every
+full-recall superset tie at reward 1.0. It therefore permits and can reinforce coverage
+hedging under citation uncertainty, but does not by itself force cite-all. The minimal
+arm resolves that indifference through F1 precision. A separate overcitation
+subtraction is not used because it would change reward scale too.
 
 ## Benchmark design
 
@@ -129,6 +131,10 @@ dataset-audit, throughput, and rollout artifacts. It reports every preregistered
 criterion and cannot return `pass` when an artifact is missing or malformed. Dataset
 and adapter-weight hashes, run-manifest hashes, seed, reward arm, source SFT, and image
 mode prevent relabeling one artifact as another.
+
+`chart-provenance collect-azure-throughput` builds the required T4 evidence from live
+Azure ML parent/child jobs and downloaded run artifacts. A hand-written hardware
+string cannot satisfy the confirmatory gate.
 
 The executable provenance-set necessity/sufficiency diagnostic perturbs source-table
 values. It checks program dependencies only. It does not show that the VLM causally

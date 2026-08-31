@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from datetime import datetime
 from pathlib import Path
 from statistics import fmean
 from typing import Any
@@ -14,7 +15,11 @@ from chart_provenance_rl.evaluation.provenance import (
 from chart_provenance_rl.evaluation.rollouts import (
     aggregate_rollout_diagnostics,
 )
-from chart_provenance_rl.serialization import load_json, load_jsonl
+from chart_provenance_rl.serialization import (
+    load_json,
+    load_jsonl,
+    sha256_json,
+)
 
 REQUIRED_SEEDS = frozenset((17, 29, 43))
 PRIMARY_SPLIT = "test_composition"
@@ -404,8 +409,51 @@ def _validate_throughput(
     method_rows: dict[str, list[dict[str, Any]]],
 ) -> dict[str, Any]:
     report = _required_mapping(value, "throughput report")
-    if report.get("hardware") != "Standard_NC4as_T4_v3":
-        raise ValueError("Throughput report must identify Standard_NC4as_T4_v3")
+    if report.get("schema_version") != "1.0" or report.get("evidence_source") != "azure_ml_v2_cli":
+        raise ValueError("Throughput report must come from the Azure ML collector")
+    collection_sha256 = report.get("collection_sha256")
+    unsigned_report = {key: item for key, item in report.items() if key != "collection_sha256"}
+    if not is_sha256(collection_sha256) or collection_sha256 != sha256_json(unsigned_report):
+        raise ValueError("Throughput collection identity hash is invalid")
+    compute = _required_mapping(report.get("compute"), "throughput compute")
+    compute_name = compute.get("name")
+    if (
+        not isinstance(compute_name, str)
+        or not compute_name
+        or compute.get("size") != "Standard_NC4as_T4_v3"
+    ):
+        raise ValueError("Throughput compute evidence is invalid")
+    source_sha256 = report.get("source_sha256")
+    dataset_sha256 = report.get("dataset_manifest_sha256")
+    git_commit = report.get("git_commit")
+    if not is_sha256(source_sha256) or not is_sha256(dataset_sha256):
+        raise ValueError("Throughput source/data hashes are invalid")
+    if (
+        not isinstance(git_commit, str)
+        or len(git_commit) != 40
+        or any(character not in "0123456789abcdef" for character in git_commit)
+    ):
+        raise ValueError("Throughput git commit is invalid")
+    parent_jobs = report.get("pipeline_jobs")
+    if not isinstance(parent_jobs, list):
+        raise TypeError("Throughput pipeline_jobs must be a list")
+    parents_by_seed: dict[int, str] = {}
+    for item in parent_jobs:
+        parent = _required_mapping(item, "throughput pipeline job")
+        seed = parent.get("seed")
+        name = parent.get("name")
+        if (
+            not isinstance(seed, int)
+            or isinstance(seed, bool)
+            or not isinstance(name, str)
+            or not name
+            or parent.get("status") != "completed"
+            or seed in parents_by_seed
+        ):
+            raise ValueError("Throughput pipeline job evidence is invalid")
+        parents_by_seed[seed] = name
+    if set(parents_by_seed) != REQUIRED_SEEDS:
+        raise ValueError("Throughput evidence requires all three seed pipelines")
     runs = report.get("runs")
     if not isinstance(runs, list):
         raise TypeError("Throughput report runs must be a list")
@@ -425,6 +473,25 @@ def _validate_throughput(
         if key in observed:
             raise ValueError(f"Duplicate throughput run: {key}")
         observed[key] = run
+        expected_component = {
+            "sft": "sft",
+            "naive_recall": "grpo_naive",
+            "minimal_provenance": "grpo_minimal",
+        }.get(stage)
+        if (
+            run.get("parent_job_name") != parents_by_seed.get(seed)
+            or run.get("component_name") != expected_component
+            or not isinstance(run.get("job_name"), str)
+            or not run.get("job_name")
+            or run.get("compute") != compute_name
+            or run.get("compute_size") != "Standard_NC4as_T4_v3"
+            or run.get("source_sha256") != source_sha256
+            or run.get("git_commit") != git_commit
+            or run.get("dataset_manifest_sha256") != dataset_sha256
+            or not is_sha256(run.get("training_config_sha256"))
+            or not _valid_time_range(run)
+        ):
+            raise ValueError("Throughput child-job evidence is invalid")
     complete = set(observed) == required_pairs and all(
         run.get("status") == "completed"
         and run.get("steps") == EXPECTED_STEPS
@@ -468,6 +535,7 @@ def _validate_throughput(
     return {
         "complete": complete,
         "identity_match": identity_match,
+        "evidence_source": "azure_ml_v2_cli",
         "required_run_count": len(required_pairs),
         "observed_run_count": len(observed),
     }
@@ -579,6 +647,28 @@ def _has_complete_step_coverage(group: dict[str, Any]) -> bool:
     return set(range(EXPECTED_STEPS)).issubset(observed) or set(
         range(1, EXPECTED_STEPS + 1)
     ).issubset(observed)
+
+
+def _valid_time_range(run: dict[str, Any]) -> bool:
+    start = run.get("start_time")
+    end = run.get("end_time")
+    wall_seconds = run.get("wall_seconds")
+    if (
+        not isinstance(start, str)
+        or not isinstance(end, str)
+        or not isinstance(wall_seconds, int | float)
+        or isinstance(wall_seconds, bool)
+    ):
+        return False
+    try:
+        start_time = datetime.fromisoformat(start.replace("Z", "+00:00"))
+        end_time = datetime.fromisoformat(end.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if start_time.tzinfo is None or end_time.tzinfo is None:
+        return False
+    duration = (end_time - start_time).total_seconds()
+    return duration > 0 and abs(duration - float(wall_seconds)) < 0.001
 
 
 def _run_identity(

@@ -170,29 +170,36 @@ def test_cli_rollout_and_confirmatory_commands_fail_closed(
     assert summary["row_count"] == 1
     missing = tmp_path / "missing"
     output = tmp_path / "confirm.json"
-    report = _run_cli(
-        monkeypatch,
-        capsys,
-        "confirm",
-        "--sft",
-        str(missing),
-        "--naive",
-        str(missing),
-        "--minimal",
-        str(missing),
-        "--question-only",
-        str(missing),
-        "--shuffled",
-        str(missing),
-        "--dataset-audit",
-        str(missing),
-        "--throughput",
-        str(missing),
-        "--rollout-diagnostics",
-        str(missing),
-        "--output",
-        str(output),
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "chart-provenance",
+            "confirm",
+            "--sft",
+            str(missing),
+            "--naive",
+            str(missing),
+            "--minimal",
+            str(missing),
+            "--question-only",
+            str(missing),
+            "--shuffled",
+            str(missing),
+            "--dataset-audit",
+            str(missing),
+            "--throughput",
+            str(missing),
+            "--rollout-diagnostics",
+            str(missing),
+            "--output",
+            str(output),
+        ],
     )
+    with pytest.raises(SystemExit) as exit_error:
+        cli.main()
+    report = json.loads(capsys.readouterr().out)
+    assert exit_error.value.code == 2
     assert report["status"] == "incomplete"
     assert output.is_file()
 

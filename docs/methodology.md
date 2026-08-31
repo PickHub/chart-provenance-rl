@@ -70,6 +70,9 @@ Format failures and cap violations score zero in every arm. Both evidence arms g
 answer exact match. This isolates recall versus precision rather than confounding the
 comparison with different answer gating.
 
+The answer-only ablation is `schema_valid * answer_exact`: it removes evidence quality
+credit but retains the shared parser, citation cap, and action space.
+
 GRPO uses `beta=0`. With an active PEFT adapter, TRL's implicit reference path disables
 that adapter and would compare against the base model rather than the shared SFT
 initialization. Removing that KL term keeps the matched reward comparison from being

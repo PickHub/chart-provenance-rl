@@ -49,13 +49,14 @@ methods:
     source_predictions: sft
     postprocessing: deterministic_json_repair
   grpo_answer_only:
-    reward: answer_exact
+    reward: schema_valid_answer_exact
   grpo_naive_recall:
     reward: answer_gated_recall
   grpo_minimal_provenance:
     reward: answer_gated_best_valid_set_f1
 reporting:
   question_is_statistical_unit: true
+  throughput_evidence: azure_ml_v2_parent_child_jobs_and_downloaded_artifacts
   bootstrap_iterations: 10000
   randomization_iterations: 10000
   confidence_level: 0.95

@@ -55,12 +55,14 @@ All three GRPO arms start from the exact same seed-specific SFT adapter and shar
 Rewards are:
 
 ```text
-answer-only = EM
+answer-only = schema_valid * EM
 naive       = EM * (0.5 + 0.5 * best-set recall)
 minimal     = EM * (0.5 + 0.5 * best-set F1)
 ```
 
-F1 is the primary minimality intervention. No extra overcitation subtraction is used.
+Every arm uses the same strict output contract. The answer-only ablation receives
+answer credit only for schema-valid outputs. F1 is the primary minimality intervention;
+no extra overcitation subtraction is used.
 
 ## Data and splits
 

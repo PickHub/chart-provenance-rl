@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -35,6 +36,15 @@ def main() -> None:
     result = args.handler(args)
     if result is not None:
         print(canonical_json(result))
+    if getattr(args, "exit_on_status", False):
+        if not isinstance(result, dict):
+            raise TypeError("Status-bearing command must return a JSON object")
+        status = result.get("status")
+        exit_code = (
+            {"pass": 0, "fail": 1, "incomplete": 2}.get(status, 1) if isinstance(status, str) else 1
+        )
+        if exit_code:
+            raise SystemExit(exit_code)
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -99,7 +109,35 @@ def _parser() -> argparse.ArgumentParser:
         required=True,
     )
     confirm.add_argument("--output", type=Path, required=True)
-    confirm.set_defaults(handler=_confirm)
+    confirm.set_defaults(handler=_confirm, exit_on_status=True)
+
+    throughput = subparsers.add_parser("collect-azure-throughput")
+    throughput.add_argument(
+        "--pipeline-job",
+        action="append",
+        required=True,
+    )
+    throughput.add_argument(
+        "--subscription",
+        default=os.environ.get("AZURE_SUBSCRIPTION_ID"),
+        required="AZURE_SUBSCRIPTION_ID" not in os.environ,
+    )
+    throughput.add_argument(
+        "--resource-group",
+        default=os.environ.get("AZURE_RESOURCE_GROUP"),
+        required="AZURE_RESOURCE_GROUP" not in os.environ,
+    )
+    throughput.add_argument(
+        "--workspace",
+        default=os.environ.get("AZURE_ML_WORKSPACE"),
+        required="AZURE_ML_WORKSPACE" not in os.environ,
+    )
+    throughput.add_argument(
+        "--compute",
+        default=os.environ.get("AZURE_ML_COMPUTE", "gpu-t4-dedicated"),
+    )
+    throughput.add_argument("--output", type=Path, required=True)
+    throughput.set_defaults(handler=_collect_azure_throughput)
 
     smoke = subparsers.add_parser("smoke")
     smoke.add_argument("--output", type=Path)
@@ -190,6 +228,25 @@ def _confirm(args: argparse.Namespace) -> dict[str, Any]:
     )
     write_json(args.output, report)
     return report
+
+
+def _collect_azure_throughput(args: argparse.Namespace) -> dict[str, Any]:
+    from chart_provenance_rl.azure_throughput import (
+        AzureCliEvidenceClient,
+        collect_azure_throughput,
+    )
+
+    client = AzureCliEvidenceClient(
+        subscription=args.subscription,
+        resource_group=args.resource_group,
+        workspace=args.workspace,
+        compute=args.compute,
+    )
+    return collect_azure_throughput(
+        client,
+        args.pipeline_job,
+        output=args.output,
+    )
 
 
 def _smoke(args: argparse.Namespace) -> dict[str, Any]:

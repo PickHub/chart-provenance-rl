@@ -8,6 +8,7 @@ from chart_provenance_rl.evaluation.rewards import RewardArm
 from chart_provenance_rl.schema import EvidenceRef
 from chart_provenance_rl.serialization import sha256_file, write_json
 from chart_provenance_rl.training.artifacts import (
+    ADAPTER_ARTIFACT_MANIFEST,
     validate_adapter_artifact,
     write_adapter_artifact_manifest,
 )
@@ -404,6 +405,34 @@ def test_adapter_artifact_and_source_digest_fail_closed(
     (adapter / "adapter_model.bin").write_bytes(b"unexpected")
     with pytest.raises(ValueError, match="file set"):
         validate_adapter_artifact(adapter)
+
+
+@pytest.mark.parametrize(
+    ("manifest", "error_type", "message"),
+    [
+        ([], TypeError, "must be an object"),
+        ({"files": []}, ValueError, "contains no files"),
+        ({"files": [1]}, TypeError, "entries must be objects"),
+    ],
+)
+def test_adapter_artifact_manifest_shape_is_strict(
+    tmp_path: Path,
+    manifest: object,
+    error_type: type[Exception],
+    message: str,
+) -> None:
+    write_json(tmp_path / ADAPTER_ARTIFACT_MANIFEST, manifest)
+    with pytest.raises(error_type, match=message):
+        validate_adapter_artifact(tmp_path)
+
+
+def test_adapter_artifact_rejects_symlinked_weights(tmp_path: Path) -> None:
+    (tmp_path / "adapter_config.json").write_text("{}")
+    target = tmp_path / "weights.bin"
+    target.write_bytes(b"weights")
+    (tmp_path / "adapter_model.safetensors").symlink_to(target)
+    with pytest.raises(ValueError, match="must not be symlinks"):
+        write_adapter_artifact_manifest(tmp_path)
 
 
 class _FakeData:

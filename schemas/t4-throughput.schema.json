@@ -1,17 +1,83 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/PickHub/chart-provenance-rl/schemas/t4-throughput.schema.json",
-  "title": "T4 three-seed throughput report",
+  "title": "Azure ML T4 three-seed throughput evidence",
   "type": "object",
   "additionalProperties": false,
-  "required": ["hardware", "runs"],
+  "required": [
+    "schema_version",
+    "evidence_source",
+    "collection_sha256",
+    "compute",
+    "pipeline_jobs",
+    "git_commit",
+    "source_sha256",
+    "dataset_manifest_sha256",
+    "runs"
+  ],
   "properties": {
-    "hardware": {
-      "const": "Standard_NC4as_T4_v3"
+    "schema_version": {
+      "const": "1.0"
+    },
+    "evidence_source": {
+      "const": "azure_ml_v2_cli"
+    },
+    "collection_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "compute": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "size"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "size": {
+          "const": "Standard_NC4as_T4_v3"
+        }
+      }
+    },
+    "pipeline_jobs": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "status", "seed"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "const": "completed"
+          },
+          "seed": {
+            "enum": [17, 29, 43]
+          }
+        }
+      }
+    },
+    "source_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "git_commit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "dataset_manifest_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
     },
     "runs": {
       "type": "array",
       "minItems": 9,
+      "maxItems": 9,
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -21,9 +87,20 @@
           "status",
           "steps",
           "max_steps",
+          "wall_seconds",
+          "parent_job_name",
+          "job_name",
+          "component_name",
+          "compute",
+          "compute_size",
+          "start_time",
+          "end_time",
+          "source_sha256",
+          "git_commit",
+          "dataset_manifest_sha256",
+          "training_config_sha256",
           "run_manifest_sha256",
-          "adapter_artifact_sha256",
-          "wall_seconds"
+          "adapter_artifact_sha256"
         ],
         "properties": {
           "seed": {
@@ -33,14 +110,59 @@
             "enum": ["sft", "naive_recall", "minimal_provenance"]
           },
           "status": {
-            "enum": ["completed", "failed", "cancelled"]
+            "const": "completed"
           },
           "steps": {
-            "type": "integer",
-            "minimum": 0
+            "const": 100
           },
           "max_steps": {
             "const": 100
+          },
+          "wall_seconds": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "parent_job_name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "job_name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "component_name": {
+            "enum": ["sft", "grpo_naive", "grpo_minimal"]
+          },
+          "compute": {
+            "type": "string",
+            "minLength": 1
+          },
+          "compute_size": {
+            "const": "Standard_NC4as_T4_v3"
+          },
+          "start_time": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "end_time": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "source_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "git_commit": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{40}$"
+          },
+          "dataset_manifest_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "training_config_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
           },
           "run_manifest_sha256": {
             "type": "string",
@@ -49,10 +171,6 @@
           "adapter_artifact_sha256": {
             "type": "string",
             "pattern": "^[0-9a-f]{64}$"
-          },
-          "wall_seconds": {
-            "type": "number",
-            "exclusiveMinimum": 0
           }
         }
       }

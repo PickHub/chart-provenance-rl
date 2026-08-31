@@ -115,17 +115,36 @@ The pipeline evaluates the minimal adapter normally, with a neutral image, and w
 deterministic derangement of held-out images. The latter two are the actual model
 leakage probes. The template-majority question-only baseline remains descriptive.
 
+## Collect live throughput evidence
+
+The confirmatory gate does not accept a hand-written hardware label. After all three
+seed pipelines finish, collect their parent and child job metadata plus downloaded
+run/adapter manifests:
+
+```bash
+uv run chart-provenance collect-azure-throughput \
+  --pipeline-job "<seed-17-parent-job>" \
+  --pipeline-job "<seed-29-parent-job>" \
+  --pipeline-job "<seed-43-parent-job>" \
+  --output results/t4-throughput.json
+```
+
+The collector uses the Azure environment variables defined above. It queries each
+parent pipeline and `az ml job list --parent-job-name`, verifies completed SFT,
+naive, and minimal child jobs on the configured AmlCompute cluster, checks the live
+cluster SKU, derives wall time from Azure timestamps, downloads each child artifact,
+validates adapter weights, and records source/config/data/run/adapter hashes. Missing,
+nonterminal, wrong-seed, wrong-compute, or mismatched evidence aborts collection.
+
+The resulting artifact follows
+[`schemas/t4-throughput.schema.json`](../schemas/t4-throughput.schema.json). It stores
+job IDs, status, SKU, timestamps, and hashes, but no account IDs or user creation
+metadata.
+
 ## Confirmatory analysis
 
-Concatenate each method's `question_metrics.jsonl` over seeds. Build the documented T4
-throughput JSON and concatenate naive/minimal `rollout_diagnostics.jsonl`, preserving
-their arm and seed fields. Then run:
-
-The throughput artifact follows
-[`schemas/t4-throughput.schema.json`](../schemas/t4-throughput.schema.json): one row
-for each required seed and each of `sft`, `naive_recall`, and
-`minimal_provenance`, with terminal status, configured/completed steps, wall-clock
-seconds, run-manifest hash, and adapter-weight artifact hash.
+Concatenate each method's `question_metrics.jsonl` and naive/minimal
+`rollout_diagnostics.jsonl` over seeds, preserving their provenance fields. Then run:
 
 ```bash
 uv run chart-provenance confirm \
