@@ -36,6 +36,7 @@ def prepare_assets(
     audit = audit_dataset(dataset_root)
     if audit["status"] != "pass":
         raise RuntimeError(f"Prepared dataset failed audit: {audit['errors']}")
+    write_json(dataset_root / "audit_report.json", audit)
     if model_output.is_symlink() or (
         model_output.exists() and any(path.is_symlink() for path in model_output.rglob("*"))
     ):

@@ -33,16 +33,18 @@ def parse_output(raw_output: str, *, citation_cap: int = MAX_EVIDENCE_REFS) -> P
         return _invalid("duplicate_json_key", json_valid=False)
     if not isinstance(value, dict):
         return _invalid("root_not_object")
+    answer = _candidate_answer(value)
     if set(value) != {"answer", "evidence"}:
-        return _invalid("unexpected_top_level_keys")
-    answer = value["answer"]
+        return _invalid("unexpected_top_level_keys", answer=answer)
+    answer_value = value["answer"]
     evidence = value["evidence"]
-    if not isinstance(answer, str):
+    if not isinstance(answer_value, str):
         return _invalid("answer_not_string")
-    if not answer.strip():
+    if not answer_value.strip():
         return _invalid("empty_answer")
+    answer = answer_value
     if not isinstance(evidence, list):
-        return _invalid("evidence_not_list")
+        return _invalid("evidence_not_list", answer=answer)
     raw_count = len(evidence)
     if raw_count > citation_cap:
         return ParsedOutput(
@@ -60,11 +62,19 @@ def parse_output(raw_output: str, *, citation_cap: int = MAX_EVIDENCE_REFS) -> P
     duplicate_count = 0
     for raw_reference in evidence:
         if not isinstance(raw_reference, dict):
-            return _invalid("evidence_item_not_object", raw_count=raw_count)
+            return _invalid(
+                "evidence_item_not_object",
+                raw_count=raw_count,
+                answer=answer,
+            )
         try:
             reference = EvidenceRef.from_dict(raw_reference)
         except (TypeError, ValueError):
-            return _invalid("invalid_evidence_item", raw_count=raw_count)
+            return _invalid(
+                "invalid_evidence_item",
+                raw_count=raw_count,
+                answer=answer,
+            )
         normalized_reference = EvidenceRef(
             series=_normalize_label(reference.series),
             category=_normalize_label(reference.category),
@@ -127,16 +137,22 @@ def _normalize_label(value: str) -> str:
     return " ".join(value.strip().split())
 
 
+def _candidate_answer(value: dict[str, Any]) -> str | None:
+    answer = value.get("answer")
+    return answer if isinstance(answer, str) and answer.strip() else None
+
+
 def _invalid(
     error: str,
     *,
     json_valid: bool = True,
     raw_count: int = 0,
+    answer: str | None = None,
 ) -> ParsedOutput:
     return ParsedOutput(
         json_valid=json_valid,
         schema_valid=False,
-        answer=None,
+        answer=answer,
         evidence=(),
         raw_evidence_count=raw_count,
         duplicate_evidence_count=0,

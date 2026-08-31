@@ -17,18 +17,20 @@ def load_sft_dataset(root: Path, split: str = "train") -> Any:
     records = _records(root, split)
     examples = []
     for record in records:
-        provenance = record.minimal_provenance_sets[
-            record.generation_index % len(record.minimal_provenance_sets)
-        ]
-        examples.append(
-            {
-                "record_id": record.record_id,
-                "prompt": training_prompt(record.question),
-                "completion": training_completion(record.answer, provenance),
-                "image": _load_image(root / record.image_path),
-            }
-        )
+        examples.append(build_sft_example(root, record))
     return Dataset.from_list(examples)
+
+
+def build_sft_example(root: Path, record: BenchmarkRecord) -> dict[str, Any]:
+    provenance = record.minimal_provenance_sets[
+        record.generation_index % len(record.minimal_provenance_sets)
+    ]
+    return {
+        "record_id": record.record_id,
+        "prompt": training_prompt(record.question),
+        "completion": training_completion(record.answer, provenance),
+        "images": [_load_image(root / record.image_path)],
+    }
 
 
 def load_grpo_dataset(root: Path, split: str = "train") -> Any:

@@ -19,7 +19,12 @@ Each record includes hidden evaluator fields:
 - canonical typed source table and table SHA-256;
 - executable program;
 - canonical answer;
-- valid minimal provenance sets.
+- valid minimal provenance sets;
+- generator nuisance-factor assignments;
+- rendered label boxes, roles, colors, contrast, and value-to-cell references.
+
+Current record schema version is `1.1`. Version `1.1` adds generator-factor and render
+visibility metadata and intentionally rejects the earlier incompatible `1.0` shape.
 
 Model adapters expose only the image, system output contract, and question.
 
@@ -43,6 +48,11 @@ bar, line, or table-like PNGs no larger than 512 by 384.
 bytes are hashed. Running the same pinned environment produces byte-identical
 manifests and images. `chart-provenance audit` checks sidecars, executable labels,
 content hashes, split overlap, prompt leakage, filenames, and split design.
+
+The full profile balances each train program across chart type, renderer, category
+family, series family, target-series position, and title. It reports contingency
+tables and per-program answer counts/entropy. Unexpected duplicate image or table
+hashes within a split are fatal.
 
 The generator uses Pillow 12.3.0 and its bundled Aileron Regular subset. It does not
 download a font.

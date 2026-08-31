@@ -21,6 +21,10 @@ from chart_provenance_rl.evaluation.statistics import (
     paired_question_test,
 )
 from chart_provenance_rl.schema import BenchmarkRecord, EvidenceRef
+from chart_provenance_rl.training.inference import (
+    ImageMode,
+    _inference_image,
+)
 
 
 def test_metrics_use_one_row_per_question(records: list[BenchmarkRecord]) -> None:
@@ -52,13 +56,29 @@ def test_unknown_and_duplicate_references_fail_shared_schema(
 ) -> None:
     record = records[0]
     unknown = f'{{"answer":"{record.answer}","evidence":[{{"series":"Bogus","category":"Bogus"}}]}}'
-    assert not evaluate_prediction(record, unknown).valid_schema
+    unknown_metrics = evaluate_prediction(record, unknown)
+    assert unknown_metrics.answer_em
+    assert not unknown_metrics.valid_schema
+    assert not unknown_metrics.joint_exact
     reference = record.table.cells()[0]
     duplicate = (
         f'{{"answer":"{record.answer}","evidence":['
         f"{_reference_json(reference)},{_reference_json(reference)}]}}"
     )
-    assert not evaluate_prediction(record, duplicate).valid_schema
+    duplicate_metrics = evaluate_prediction(record, duplicate)
+    assert duplicate_metrics.answer_em
+    assert not duplicate_metrics.valid_schema
+    assert not duplicate_metrics.joint_exact
+    all_cells = record.table.cells()
+    malformed_cite_all = (
+        f'{{"answer":"{record.answer}","evidence":['
+        + ",".join(_reference_json(reference) for reference in all_cells)
+        + f",{_reference_json(all_cells[0])}]}}"
+    )
+    cite_all_metrics = evaluate_prediction(record, malformed_cite_all)
+    assert cite_all_metrics.answer_em
+    assert not cite_all_metrics.valid_schema
+    assert not cite_all_metrics.cite_all
 
 
 def test_question_only_image_shuffle_and_renderer_probes(
@@ -74,6 +94,24 @@ def test_question_only_image_shuffle_and_renderer_probes(
     classifier = renderer_family_classifier(dataset_root, records)
     assert classifier["evaluated_images"] > 0
     assert 0.0 <= classifier["accuracy"] <= 1.0
+    blank, blank_source = _inference_image(
+        dataset_root,
+        composition[0].record_id,
+        composition[0].image_path,
+        ImageMode.BLANK,
+        {},
+    )
+    assert blank_source == "neutral_blank"
+    assert blank.getbbox() == (0, 0, blank.width, blank.height)
+    shuffled_image, shuffled_source = _inference_image(
+        dataset_root,
+        composition[0].record_id,
+        composition[0].image_path,
+        ImageMode.SHUFFLED,
+        shuffle,
+    )
+    assert shuffled_source != composition[0].image_path
+    assert shuffled_image.size == blank.size
 
 
 def test_counterfactual_is_program_level(records: list[BenchmarkRecord]) -> None:

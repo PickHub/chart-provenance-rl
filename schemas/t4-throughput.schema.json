@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/PickHub/chart-provenance-rl/schemas/t4-throughput.schema.json",
+  "title": "T4 three-seed throughput report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["hardware", "runs"],
+  "properties": {
+    "hardware": {
+      "const": "Standard_NC4as_T4_v3"
+    },
+    "runs": {
+      "type": "array",
+      "minItems": 9,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "seed",
+          "stage",
+          "status",
+          "steps",
+          "max_steps",
+          "run_manifest_sha256",
+          "adapter_artifact_sha256",
+          "wall_seconds"
+        ],
+        "properties": {
+          "seed": {
+            "enum": [17, 29, 43]
+          },
+          "stage": {
+            "enum": ["sft", "naive_recall", "minimal_provenance"]
+          },
+          "status": {
+            "enum": ["completed", "failed", "cancelled"]
+          },
+          "steps": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "max_steps": {
+            "const": 100
+          },
+          "run_manifest_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "adapter_artifact_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "wall_seconds": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          }
+        }
+      }
+    }
+  }
+}

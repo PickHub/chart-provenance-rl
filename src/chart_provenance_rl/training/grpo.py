@@ -5,13 +5,26 @@ from pathlib import Path
 
 from chart_provenance_rl.constants import MODEL_ID
 from chart_provenance_rl.evaluation.rewards import RewardArm
+from chart_provenance_rl.evaluation.rollouts import (
+    bind_completed_rollout_artifact,
+    reconcile_rollout_log,
+)
+from chart_provenance_rl.serialization import sha256_file
+from chart_provenance_rl.training.artifacts import (
+    validate_adapter_artifact,
+    write_adapter_artifact_manifest,
+)
 from chart_provenance_rl.training.common import (
+    RUN_MANIFEST,
+    build_immutable_training_manifest,
+    finalize_training_manifest,
     resolve_resume_checkpoint,
-    write_training_manifest,
+    validate_resume_manifest,
 )
 from chart_provenance_rl.training.configuration import grpo_config_kwargs
 from chart_provenance_rl.training.data import load_grpo_dataset
 from chart_provenance_rl.training.model import (
+    assert_frozen_vision_and_summarize,
     enforce_trainable_parameter_dtype,
     load_model_stack,
 )
@@ -48,28 +61,29 @@ def train_grpo(
 
     if not (sft_adapter / "adapter_config.json").is_file():
         raise FileNotFoundError(f"GRPO arms must start from the same SFT adapter: {sft_adapter}")
+    sft_manifest = sft_adapter / RUN_MANIFEST
+    if not sft_manifest.is_file():
+        raise FileNotFoundError(
+            f"SFT adapter is missing its immutable run manifest: {sft_manifest}"
+        )
+    sft_adapter_sha256 = validate_adapter_artifact(sft_adapter)
     output_dir.mkdir(parents=True, exist_ok=True)
-    stack = load_model_stack(
-        model_source=model_source,
-        adapter_path=sft_adapter,
-        trainable_adapter=True,
-    )
-    dataset = load_grpo_dataset(dataset_root)
     config_kwargs = grpo_config_kwargs(
         output_dir,
         seed=seed,
         max_steps=max_steps,
     )
     config_kwargs["run_name"] = f"chart-provenance-grpo-{reward_arm.value}-seed-{seed}"
-    config = GRPOConfig(**config_kwargs)
-    write_training_manifest(
-        output_dir,
+    immutable = build_immutable_training_manifest(
         stage="grpo",
         seed=seed,
         max_steps=max_steps,
+        training_config=config_kwargs,
         extra={
             "reward_arm": reward_arm.value,
-            "sft_adapter": str(sft_adapter),
+            "sft_run_manifest_sha256": sha256_file(sft_manifest),
+            "sft_adapter_sha256": sft_adapter_sha256,
+            "dataset_manifest_sha256": sha256_file(dataset_root / "dataset.json"),
             "quantization": "4bit-nf4-double-quant",
             "compute_dtype": "float16",
             "vision_frozen": True,
@@ -77,13 +91,23 @@ def train_grpo(
             "temperature": 1.0,
             "use_vllm": False,
             "beta": 0.0,
-            "trainable_parameter_dtype": "float16",
-            "model_source": str(model_source),
         },
     )
+    resume_checkpoint = resolve_resume_checkpoint(output_dir, resume)
+    validate_resume_manifest(output_dir, immutable)
+    rollout_log = output_dir / "rollout_diagnostics.jsonl"
+    reconcile_rollout_log(rollout_log, resume_checkpoint)
+    stack = load_model_stack(
+        model_source=model_source,
+        adapter_path=sft_adapter,
+        trainable_adapter=True,
+    )
+    dataset = load_grpo_dataset(dataset_root)
+    config = GRPOConfig(**config_kwargs)
     reward = TrainingReward(
         reward_arm,
-        rollout_log=output_dir / "rollout_diagnostics.jsonl",
+        seed=seed,
+        rollout_log=rollout_log,
     )
     trainer = GRPOTrainer(
         model=stack.model,
@@ -93,9 +117,24 @@ def train_grpo(
         processing_class=stack.processor,
     )
     enforce_trainable_parameter_dtype(trainer.model, torch.float16)
-    trainer.train(resume_from_checkpoint=resolve_resume_checkpoint(output_dir, resume))
+    trainable = assert_frozen_vision_and_summarize(trainer.model)
+    finalize_training_manifest(
+        output_dir,
+        immutable=immutable,
+        trainable_parameter_names=trainable.names,
+        trainable_parameter_count=trainable.count,
+    )
+    run_manifest_sha256 = sha256_file(output_dir / RUN_MANIFEST)
+    reward.run_manifest_sha256 = run_manifest_sha256
+    trainer.train(resume_from_checkpoint=resume_checkpoint)
     trainer.save_model(str(output_dir))
     stack.processor.save_pretrained(str(output_dir))
+    adapter_artifact_sha256 = write_adapter_artifact_manifest(output_dir)
+    bind_completed_rollout_artifact(
+        rollout_log,
+        run_manifest_sha256=run_manifest_sha256,
+        adapter_artifact_sha256=adapter_artifact_sha256,
+    )
 
 
 def _parser() -> argparse.ArgumentParser:

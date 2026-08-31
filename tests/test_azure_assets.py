@@ -46,6 +46,50 @@ def test_pipeline_contains_matched_arms_and_all_baselines() -> None:
     assert jobs["score_grpo_answer"]["inputs"]["method"] == "grpo_answer_only"
     assert jobs["score_grpo_naive"]["inputs"]["method"] == "grpo_naive_recall"
     assert jobs["score_grpo_minimal"]["inputs"]["method"] == ("grpo_minimal_provenance")
+    assert jobs["predict_minimal_question_only"]["inputs"]["image_mode"] == "blank"
+    assert jobs["predict_minimal_shuffled"]["inputs"]["image_mode"] == "shuffled"
+    assert jobs["score_minimal_question_only"]["inputs"]["method"] == ("grpo_minimal_question_only")
+    assert jobs["score_minimal_shuffled"]["inputs"]["method"] == ("grpo_minimal_image_shuffle")
+
+
+def test_azure_component_commands_cover_probe_and_confirmatory_inputs() -> None:
+    predict = _yaml(ROOT / "azure/components/predict.yml")
+    assert "--image-mode ${{inputs.image_mode}}" in predict["command"]
+    assert "$[[--adapter-path ${{inputs.adapter}}]]" in predict["command"]
+    confirm = _yaml(ROOT / "azure/components/confirm.yml")
+    for argument in (
+        "--sft",
+        "--naive",
+        "--minimal",
+        "--question-only",
+        "--shuffled",
+        "--dataset-audit",
+        "--throughput",
+        "--rollout-diagnostics",
+    ):
+        assert argument in confirm["command"]
+    assert set(confirm["inputs"]) >= {
+        "naive_rollouts",
+        "minimal_rollouts",
+    }
+    assert confirm["environment"] == "azureml:chart-provenance-rl-gpu:1"
+
+
+def test_public_files_do_not_contain_account_identifiers() -> None:
+    public_files = [
+        ROOT / "scripts/azure_preflight.py",
+        ROOT / "docs/azure.md",
+    ]
+    text = "\n".join(path.read_text() for path in public_files)
+    assert not re.search(
+        r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-"
+        r"[0-9a-f]{4}-[0-9a-f]{12}\b",
+        text,
+        flags=re.IGNORECASE,
+    )
+    assert "DEFAULT_SUBSCRIPTION" not in text
+    assert "<subscription-id>" in text
+    assert "AZURE_ML_WORKSPACE" in text
 
 
 def test_ci_actions_are_immutable_and_dependabot_covers_both_ecosystems() -> None:

@@ -1,13 +1,14 @@
 # Chart provenance reward misspecification
 
-Does a recall-only evidence reward teach a chart-QA model to cite everything? This
-artifact provides a controlled benchmark and matched online-GRPO experiment for
-measuring that failure mode. It generates charts from typed tables and executable
-programs, asks for an answer plus visible semantic evidence, and compares a naive
-recall reward with a minimal-provenance reward that includes evidence precision.
+Can a recall-only evidence reward distinguish minimal provenance from a coverage
+hedge that cites every chart entity? This artifact provides a controlled benchmark and
+matched online group-relative experiment for measuring that reward indifference. It
+generates charts from typed tables and executable programs, asks for an answer plus
+visible semantic evidence, and compares recall with minimal-provenance F1.
 
-The intended result is a causal comparison of reward definitions, not a generic chart
-demo and not a claim that a model has already improved.
+The intended result is a controlled comparison of reward definitions, not a generic
+chart demo, independent causal visual-grounding evidence, or a claim that a model has
+already improved.
 
 ## Status
 
@@ -78,10 +79,11 @@ minimal     = EM * (0.5 + 0.5 * F1)
 ```
 
 Malformed output and citation-cap violations receive zero. Both evidence rewards are
-answer-gated and lie in `[0, 1]`. The naive arm omits precision, making correct-answer
-cite-all an optimum. The minimal arm penalizes extra citations through precision in
-F1. A separate subtraction is not used in the primary comparison because that would
-change reward scale as well as evidence scoring.
+answer-gated and lie in `[0, 1]`. The naive arm omits precision, so an exact minimal set
+and every full-recall superset tie at reward 1.0. It therefore permits and can reinforce
+coverage hedging under citation uncertainty, but does not by itself force cite-all.
+The minimal arm resolves that indifference through F1 precision. A separate
+overcitation subtraction is not used because it would change reward scale too.
 
 ## Benchmark design
 
@@ -98,7 +100,10 @@ composition OOD split. Secondary stress splits cover:
 All images, source tables, records, and manifests are content-addressed or hashed.
 Train and held-out splits use distinct grammar/config seeds. Audits verify executable
 answers, sidecars, content hashes, disjoint table/image content, prompt/filename
-leakage, held-out program families, renderer families, and duplicate behavior.
+leakage, held-out program families, renderer families, nuisance-factor contingency
+tables, answer entropy, and duplicate behavior. Every rendered label retains its
+bounding box, foreground/background colors, and contrast ratio; generation fails if a
+label clips or overlaps another label.
 
 See [methodology](docs/methodology.md), the
 [machine-readable experiment matrix](configs/experiment_matrix.yml), and the
@@ -119,6 +124,11 @@ examples. Report:
 
 Main comparisons average each question across three seeds before a paired
 question-level bootstrap confidence interval and sign randomization test.
+`chart-provenance confirm` consumes SFT, naive, minimal, neutral-image, shuffled-image,
+dataset-audit, throughput, and rollout artifacts. It reports every preregistered
+criterion and cannot return `pass` when an artifact is missing or malformed. Dataset
+and adapter-weight hashes, run-manifest hashes, seed, reward arm, source SFT, and image
+mode prevent relabeling one artifact as another.
 
 The executable provenance-set necessity/sufficiency diagnostic perturbs source-table
 values. It checks program dependencies only. It does not show that the VLM causally
@@ -134,7 +144,8 @@ was checked for the exact SHA, license, `transformers` library, and
 
 The implementation uses 4-bit NF4 double quantization, float16 compute, rank-8 LoRA on
 `q_proj` and `v_proj`, a frozen vision tower, SDPA, images no larger than 512 pixels,
-two completions per prompt, zero reference-model KL, and no vLLM. TRL `0.26.2` is pinned; its upstream tag
+two completions per prompt, length-unbiased Dr.GRPO loss with unscaled group rewards,
+zero reference-model KL, and no vLLM. TRL `0.26.2` is pinned; its upstream tag
 commit `8c26b7d0e5f5ddc0ddea0d6b519ab30e437b8731` contains the Qwen3-VL QLoRA GRPO
 notebook used to lock the API.
 
@@ -142,6 +153,10 @@ TRL 0.26.2 converts trainable QLoRA parameters to bfloat16 inside both trainer
 constructors. T4 does not provide native bfloat16, so this artifact converts trainable
 adapter parameters back to float16 after trainer construction and fails if the dtype
 check does not hold.
+
+Qwen3-VL's processor cap is set through
+`image_processor.size["longest_edge"]`, not an inert `max_pixels` attribute. Model
+smoke validates the resulting patch grid against the 512 by 384 pixel budget.
 
 Run model construction separately when GPU dependencies and weights are present:
 

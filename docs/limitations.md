@@ -16,6 +16,9 @@
 - Evidence exact match operates on visible semantic labels. It does not evaluate
   bounding boxes, attention, image-region causality, explanation quality, or whether
   the model internally relied on cited entities.
+- The minimal reward and hidden joint endpoint share the same program-defined
+  provenance labels. Their agreement tests reward specification on this benchmark, not
+  independent causal visual grounding.
 - The offline intervention diagnostic tests executable source-table dependencies, not
   VLM evidence dependence. Evidence-RL's CED addresses a different causal question.
 - Deterministic JSON repair can improve format validity but cannot establish better

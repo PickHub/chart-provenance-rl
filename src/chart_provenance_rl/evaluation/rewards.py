@@ -47,6 +47,9 @@ def score_reward(
 ) -> RewardBreakdown:
     parsed = parse_output(raw_output, citation_cap=citation_cap)
     empty_score = EvidenceScore(0.0, 0.0, 0.0, False, 0, 0, 0)
+    answer_exact = parsed.answer is not None and canonical_answer(
+        parsed.answer
+    ) == canonical_answer(expected_answer)
     if parsed.schema_valid and valid_evidence_refs is not None:
         visible_keys = {evidence_key(reference) for reference in valid_evidence_refs}
         if any(evidence_key(reference) not in visible_keys for reference in parsed.evidence):
@@ -56,8 +59,14 @@ def score_reward(
                 error="unknown_evidence_reference",
             )
     if not parsed.schema_valid or parsed.answer is None:
-        return RewardBreakdown(arm, 0.0, False, empty_score, 0, parsed)
-    answer_exact = canonical_answer(parsed.answer) == canonical_answer(expected_answer)
+        return RewardBreakdown(
+            arm,
+            0.0,
+            answer_exact,
+            empty_score,
+            0,
+            parsed,
+        )
     scoring_mode = "recall" if arm is RewardArm.NAIVE_RECALL else "f1"
     evidence = score_evidence(parsed.evidence, valid_provenance_sets, mode=scoring_mode)
     overcitation = max(0, evidence.predicted_size - evidence.gold_size)

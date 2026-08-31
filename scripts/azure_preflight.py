@@ -3,12 +3,10 @@ from __future__ import annotations
 import argparse
 import ast
 import json
+import os
 import subprocess
 from typing import Any
 
-DEFAULT_SUBSCRIPTION = "eb5c4bc0-bf07-4a49-b683-37be7d6f0e94"
-DEFAULT_RESOURCE_GROUP = "rg-rag-support-scorer"
-DEFAULT_WORKSPACE = "aml-rag-support-scorer"
 DEFAULT_LOCATION = "spaincentral"
 T4_SIZE = "Standard_NC4as_T4_v3"
 A10_SIZE = "Standard_NV36ads_A10_v5"
@@ -47,7 +45,7 @@ def main() -> None:
         "compute",
         "show",
         "--name",
-        "gpu-t4-dedicated",
+        args.compute,
         "--subscription",
         args.subscription,
         "--resource-group",
@@ -75,9 +73,7 @@ def main() -> None:
             "size": A10_SIZE,
             "supported_compute_types": a10_types,
             "amlcompute_available": False,
-            "raw_vm_quota_cores": 8,
             "required_cores": 36,
-            "quota_request": "db2ba018-2a40-48ab-8f4c-8b11a55014e0",
         },
     }
     print(json.dumps(report, indent=2, sort_keys=True))
@@ -111,10 +107,29 @@ def _az_json(*arguments: str) -> Any:
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Validate Azure ML compute before submission.")
-    parser.add_argument("--subscription", default=DEFAULT_SUBSCRIPTION)
-    parser.add_argument("--resource-group", default=DEFAULT_RESOURCE_GROUP)
-    parser.add_argument("--workspace", default=DEFAULT_WORKSPACE)
-    parser.add_argument("--location", default=DEFAULT_LOCATION)
+    parser.add_argument(
+        "--subscription",
+        default=os.environ.get("AZURE_SUBSCRIPTION_ID"),
+        required="AZURE_SUBSCRIPTION_ID" not in os.environ,
+    )
+    parser.add_argument(
+        "--resource-group",
+        default=os.environ.get("AZURE_RESOURCE_GROUP"),
+        required="AZURE_RESOURCE_GROUP" not in os.environ,
+    )
+    parser.add_argument(
+        "--workspace",
+        default=os.environ.get("AZURE_ML_WORKSPACE"),
+        required="AZURE_ML_WORKSPACE" not in os.environ,
+    )
+    parser.add_argument(
+        "--compute",
+        default=os.environ.get("AZURE_ML_COMPUTE", "gpu-t4-dedicated"),
+    )
+    parser.add_argument(
+        "--location",
+        default=os.environ.get("AZURE_LOCATION", DEFAULT_LOCATION),
+    )
     return parser
 
 

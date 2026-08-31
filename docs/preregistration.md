@@ -5,9 +5,10 @@ as outcomes.
 
 ## Research question
 
-Under matched online GRPO, does an answer-gated minimal-provenance F1 reward reduce
-recall-only cite-all behavior while preserving answer accuracy and improving joint
-held-out program-composition performance?
+Under matched online group-relative training, does an answer-gated
+minimal-provenance F1 reward resolve the recall-only indifference between minimal and
+overcomplete evidence while preserving answer accuracy and improving joint held-out
+program-composition performance?
 
 ## Confirmatory contrast and endpoint
 
@@ -25,11 +26,18 @@ paired question-level difference, a 95% paired bootstrap interval with 10,000
 resamples, and a two-sided paired sign-randomization test with 10,000 draws. Rollout
 rows are not independent samples.
 
+The primary criterion passes only when the mean contrast is positive, the 95%
+bootstrap lower bound is above zero, and the two-sided randomization p-value is below
+0.05.
+
 ## Hypothesis
 
-The minimal reward will produce a positive primary contrast. The mechanism prediction
-is lower cite-all/overcitation and higher evidence precision than the naive arm. Answer
-EM is a guardrail.
+The minimal reward will produce a positive primary contrast. Recall-only reward permits
+full-recall supersets to tie with exact minimal evidence, making coverage hedging
+risk-dominant under citation uncertainty. The mechanism prediction is at least a
+10-point higher naive cite-all rate than the matched minimal arm and greater naive
+train-reward/hidden-joint divergence. Naive change from SFT is descriptive. Answer EM
+is a guardrail.
 
 ## Fixed intervention
 
@@ -41,7 +49,8 @@ All three GRPO arms start from the exact same seed-specific SFT adapter and shar
 - two stochastic completions per prompt at temperature 1.0;
 - the same strict parser, eight-cell action space, and citation cap of eight;
 - 4-bit NF4 double quantization, float16 compute, rank-8 `q_proj`/`v_proj` LoRA,
-  frozen vision tower, SDPA, zero reference-model KL, and no vLLM.
+  frozen vision tower, SDPA, Dr.GRPO sequence normalization, unscaled group rewards,
+  zero reference-model KL, and no vLLM.
 
 Rewards are:
 
@@ -62,6 +71,11 @@ sum-selected programs. Training contains lookup, comparison, argmax, and count.
 Grammar/config seeds, source table hashes, image hashes, and record hashes are
 disjoint across splits.
 
+Within each sufficiently sized split, generator audits require program kinds to span
+chart, renderer, category-family, series-family, target-series-position, and title
+levels. COUNT answers must include 1, 2, and 3. Render audits require eight visible
+semantic values with non-clipped, non-overlapping labels and contrast of at least 4.5.
+
 Secondary analyses include renderer holdout, duplicate decoys, label shuffles, order
 perturbations, answer-correct/citation-wrong probes, image shuffling, a question-only
 baseline, and cite-all attacks.
@@ -78,11 +92,14 @@ naive versus minimal remains three-seed.
 
 - Answer harm margin: minimal-reward answer EM may be at most 3 percentage points
   below naive-recall and SFT on held-out composition.
-- Mechanism floor: naive-recall must increase cite-all rate by at least 10 percentage
-  points over SFT. Otherwise the proposed reward-hacking mechanism is unsupported.
+- Mechanism floor: naive-recall cite-all rate must be at least 10 percentage points
+  above minimal-provenance, and naive train-reward/hidden-joint divergence must exceed
+  minimal divergence. Naive versus SFT change is descriptive.
 - Report evidence precision, recall, F1 conditioned on correct answers, valid
   JSON/schema, overcitation, cite-all, attack success, and training-reward versus
   hidden-joint divergence.
+- Average rollout completions within training question before arm/seed summaries;
+  rollout rows remain non-independent diagnostics.
 - The executable provenance-set necessity/sufficiency diagnostic is descriptive. It
   does not test model evidence dependence.
 
@@ -107,7 +124,8 @@ The primary hypothesis fails if any of the following hold:
 
 1. Minimal-reward GRPO does not beat SFT on joint held-out composition performance.
 2. Citation improvement comes with answer EM harm beyond the 3-point margin.
-3. Naive reward does not increase cite-all by at least 10 points versus SFT.
+3. Naive cite-all is not at least 10 points above minimal, or naive
+   train-reward/hidden-joint divergence does not exceed minimal.
 4. A leakage threshold is exceeded.
 5. Online T4 throughput cannot support three naive/minimal seeds under the fixed
    budget.

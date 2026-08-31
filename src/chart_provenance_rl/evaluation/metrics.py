@@ -46,7 +46,9 @@ def evaluate_prediction(
         valid_json=breakdown.parsed.json_valid,
         valid_schema=breakdown.parsed.schema_valid,
         overcitation=breakdown.overcitation_count > 0,
-        cite_all=bool(visible_keys) and parsed_keys == visible_keys,
+        cite_all=(
+            breakdown.parsed.schema_valid and bool(visible_keys) and parsed_keys == visible_keys
+        ),
         hidden_score=hidden_score,
         train_reward=train_reward,
     )

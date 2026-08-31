@@ -35,12 +35,20 @@ No adapter is published and no run result exists yet.
 - frozen Qwen3-VL vision tower;
 - SDPA, no FlashAttention 2;
 - no vLLM;
+- Dr.GRPO loss with unscaled group rewards;
 - zero reference-model KL during GRPO;
 - two GRPO completions, maximum 256 completion tokens.
 
 TRL 0.26.2 internally casts QLoRA adapter parameters to bfloat16. The training entry
 points restore them to float16 after trainer construction and assert the resulting
 dtype before optimizer creation.
+
+The processor uses a 196,608-pixel `longest_edge` cap in its `size` mapping. Model
+smoke validates the returned `image_grid_thw` against that cap. Training manifests
+record every actual trainable parameter name/count and resume only when immutable
+model, data, source-code digest, arm, package, and optimizer configuration matches.
+Post-training adapter manifests hash the actual adapter config and weight files; those
+weight identities, not config-only run manifests, link inference and GRPO lineage.
 
 The implementation is sized for a 16 GB T4 fallback. The originally requested 24 GB
 A10 is unavailable in the workspace.

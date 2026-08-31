@@ -4,13 +4,20 @@ import argparse
 from pathlib import Path
 
 from chart_provenance_rl.constants import MODEL_ID
+from chart_provenance_rl.serialization import sha256_file
+from chart_provenance_rl.training.artifacts import (
+    write_adapter_artifact_manifest,
+)
 from chart_provenance_rl.training.common import (
+    build_immutable_training_manifest,
+    finalize_training_manifest,
     resolve_resume_checkpoint,
-    write_training_manifest,
+    validate_resume_manifest,
 )
 from chart_provenance_rl.training.configuration import sft_config_kwargs
 from chart_provenance_rl.training.data import load_sft_dataset
 from chart_provenance_rl.training.model import (
+    assert_frozen_vision_and_summarize,
     enforce_trainable_parameter_dtype,
     load_model_stack,
 )
@@ -41,24 +48,30 @@ def train_sft(
     from trl import SFTConfig, SFTTrainer
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    stack = load_model_stack(model_source=model_source)
-    dataset = load_sft_dataset(dataset_root)
-    config = SFTConfig(**sft_config_kwargs(output_dir, seed=seed, max_steps=max_steps))
-    write_training_manifest(
+    config_kwargs = sft_config_kwargs(
         output_dir,
+        seed=seed,
+        max_steps=max_steps,
+    )
+    immutable = build_immutable_training_manifest(
         stage="sft",
         seed=seed,
         max_steps=max_steps,
+        training_config=config_kwargs,
         extra={
+            "dataset_manifest_sha256": sha256_file(dataset_root / "dataset.json"),
             "quantization": "4bit-nf4-double-quant",
             "compute_dtype": "float16",
             "vision_frozen": True,
             "lora_rank": 8,
             "lora_target_modules": ["q_proj", "v_proj"],
-            "trainable_parameter_dtype": "float16",
-            "model_source": str(model_source),
         },
     )
+    resume_checkpoint = resolve_resume_checkpoint(output_dir, resume)
+    validate_resume_manifest(output_dir, immutable)
+    stack = load_model_stack(model_source=model_source)
+    dataset = load_sft_dataset(dataset_root)
+    config = SFTConfig(**config_kwargs)
     trainer = SFTTrainer(
         model=stack.model,
         args=config,
@@ -67,9 +80,17 @@ def train_sft(
         peft_config=stack.peft_config,
     )
     enforce_trainable_parameter_dtype(trainer.model, torch.float16)
-    trainer.train(resume_from_checkpoint=resolve_resume_checkpoint(output_dir, resume))
+    trainable = assert_frozen_vision_and_summarize(trainer.model)
+    finalize_training_manifest(
+        output_dir,
+        immutable=immutable,
+        trainable_parameter_names=trainable.names,
+        trainable_parameter_count=trainable.count,
+    )
+    trainer.train(resume_from_checkpoint=resume_checkpoint)
     trainer.save_model(str(output_dir))
     stack.processor.save_pretrained(str(output_dir))
+    write_adapter_artifact_manifest(output_dir)
 
 
 def _parser() -> argparse.ArgumentParser:

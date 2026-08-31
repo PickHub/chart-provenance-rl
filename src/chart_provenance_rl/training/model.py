@@ -21,6 +21,12 @@ class ModelStack:
     peft_config: Any | None
 
 
+@dataclass(frozen=True)
+class TrainableParameterSummary:
+    names: tuple[str, ...]
+    count: int
+
+
 def load_model_stack(
     *,
     model_source: str | Path = MODEL_ID,
@@ -83,7 +89,7 @@ def load_model_stack(
         padding_side="left",
         **source_kwargs,
     )
-    processor.image_processor.max_pixels = DEFAULT_IMAGE_SIZE[0] * DEFAULT_IMAGE_SIZE[1]
+    configure_image_processor(processor)
     lora_config = LoraConfig(
         r=8,
         lora_alpha=32,
@@ -98,19 +104,23 @@ def load_model_stack(
             str(adapter_path),
             is_trainable=trainable_adapter,
         )
-        freeze_vision_tower(model)
+        if trainable_adapter:
+            assert_frozen_vision_and_summarize(model)
+        else:
+            assert_vision_tower_frozen(model)
         return ModelStack(model=model, processor=processor, peft_config=None)
     return ModelStack(model=model, processor=processor, peft_config=lora_config)
 
 
 def freeze_vision_tower(model: Any) -> None:
-    base_model = model.get_base_model() if hasattr(model, "get_base_model") else model
-    try:
-        visual = base_model.model.visual
-    except AttributeError as error:
-        raise TypeError("Expected Qwen3-VL model.model.visual vision tower") from error
+    visual = _vision_tower(model)
     for parameter in visual.parameters():
         parameter.requires_grad = False
+    assert_vision_tower_frozen(model)
+
+
+def assert_vision_tower_frozen(model: Any) -> None:
+    visual = _vision_tower(model)
     if any(parameter.requires_grad for parameter in visual.parameters()):
         raise RuntimeError("Vision tower freeze verification failed")
 
@@ -126,6 +136,71 @@ def enforce_trainable_parameter_dtype(model: Any, dtype: Any) -> int:
     if any(parameter.dtype != dtype for parameter in trainable_parameters):
         raise RuntimeError(f"Trainable parameter dtype verification failed for {dtype}")
     return sum(parameter.numel() for parameter in trainable_parameters)
+
+
+def assert_frozen_vision_and_summarize(model: Any) -> TrainableParameterSummary:
+    visual = _vision_tower(model)
+    visual_parameter_ids = {id(parameter) for parameter in visual.parameters()}
+    trainable = [
+        (name, parameter) for name, parameter in model.named_parameters() if parameter.requires_grad
+    ]
+    visual_trainable = [
+        name for name, parameter in trainable if id(parameter) in visual_parameter_ids
+    ]
+    if visual_trainable:
+        raise RuntimeError(
+            "Vision tower contains trainable parameters: " + ", ".join(visual_trainable)
+        )
+    if not trainable:
+        raise RuntimeError("Model has no trainable parameters")
+    return TrainableParameterSummary(
+        names=tuple(name for name, _parameter in trainable),
+        count=sum(parameter.numel() for _name, parameter in trainable),
+    )
+
+
+def _vision_tower(model: Any) -> Any:
+    base_model = model.get_base_model() if hasattr(model, "get_base_model") else model
+    try:
+        return base_model.model.visual
+    except AttributeError as error:
+        raise TypeError("Expected Qwen3-VL model.model.visual vision tower") from error
+
+
+def configure_image_processor(processor: Any) -> None:
+    image_processor = processor.image_processor
+    current_size = image_processor.size
+    if not isinstance(current_size, dict):
+        raise TypeError("Qwen image processor size must be a mapping")
+    max_pixels = DEFAULT_IMAGE_SIZE[0] * DEFAULT_IMAGE_SIZE[1]
+    shortest_edge = current_size.get("shortest_edge")
+    if not isinstance(shortest_edge, int) or shortest_edge <= 0:
+        raise TypeError("Qwen image processor shortest_edge must be positive")
+    image_processor.size = {
+        "shortest_edge": min(shortest_edge, max_pixels),
+        "longest_edge": max_pixels,
+    }
+    if image_processor.size["longest_edge"] != max_pixels:
+        raise RuntimeError("Qwen image processor pixel cap was not applied")
+
+
+def validate_image_grid(processor: Any, inputs: Any) -> int:
+    image_grid = inputs.get("image_grid_thw")
+    if image_grid is None:
+        raise RuntimeError("Qwen processor output is missing image_grid_thw")
+    patch_size = processor.image_processor.patch_size
+    if not isinstance(patch_size, int) or patch_size <= 0:
+        raise TypeError("Qwen image processor patch_size must be positive")
+    max_pixels = processor.image_processor.size["longest_edge"]
+    maximum_grid_pixels = 0
+    for _temporal, height, width in image_grid.tolist():
+        grid_pixels = int(height) * patch_size * int(width) * patch_size
+        maximum_grid_pixels = max(maximum_grid_pixels, grid_pixels)
+    if maximum_grid_pixels > max_pixels:
+        raise RuntimeError(
+            f"Processed image grid exceeds pixel cap: {maximum_grid_pixels} > {max_pixels}"
+        )
+    return maximum_grid_pixels
 
 
 def model_stack_smoke(
@@ -145,6 +220,9 @@ def model_stack_smoke(
     model = get_peft_model(stack.model, stack.peft_config)
     freeze_vision_tower(model)
     trainable = enforce_trainable_parameter_dtype(model, torch.float16)
+    trainable_summary = assert_frozen_vision_and_summarize(model)
+    if trainable != trainable_summary.count:
+        raise RuntimeError("Trainable parameter count changed during validation")
     image = Image.new("RGB", DEFAULT_IMAGE_SIZE, "white")
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
@@ -164,6 +242,7 @@ def model_stack_smoke(
         return_tensors="pt",
     )
     inputs.pop("token_type_ids", None)
+    image_grid_pixels = validate_image_grid(stack.processor, inputs)
     inputs = inputs.to(model.device)
     with torch.inference_mode():
         generated = model.generate(**inputs, max_new_tokens=1)
@@ -181,5 +260,8 @@ def model_stack_smoke(
         "lora_rank": 8,
         "vision_frozen": True,
         "trainable_parameter_count": trainable,
+        "trainable_parameter_names": list(trainable_summary.names),
+        "processor_longest_edge": stack.processor.image_processor.size["longest_edge"],
+        "processed_image_grid_pixels": image_grid_pixels,
         "generated_token_count": 1,
     }

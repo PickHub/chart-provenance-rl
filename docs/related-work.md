@@ -26,7 +26,7 @@ does not establish a recall-only versus minimal-citation reward comparison.
 The narrow intended contribution is a controlled chart-QA test of:
 
 1. explicit semantic answer-plus-provenance output;
-2. overcitation induced by a matched recall-only reward;
+2. overcitation and coverage hedging permitted by a matched recall-only reward;
 3. minimal-set precision under multiple valid provenance sets;
 4. generalization to held-out executable chart program composition.
 

@@ -23,6 +23,12 @@ jobs:
       - run: uv run ruff check src tests scripts
       - run: uv run mypy src tests
       - run: uv run pytest
+      - run: >-
+          uv run
+          --with 'trl==0.26.2'
+          --with 'transformers==4.57.3'
+          --with 'torch==2.8.0'
+          pytest -q tests/test_trl_contract.py -o addopts=''
       - run: uv run chart-provenance smoke
       - run: uv run --extra azure python scripts/validate_azure_assets.py
       - run: uv build

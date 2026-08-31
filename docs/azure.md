@@ -1,58 +1,38 @@
 # Azure ML execution
 
-## Fixed workspace
+## Workspace configuration
 
-```text
-subscription:   eb5c4bc0-bf07-4a49-b683-37be7d6f0e94
-resource group: rg-rag-support-scorer
-workspace:      aml-rag-support-scorer
-region:         Spain Central
-```
-
-No secret is stored in this repository. Authenticate interactively or through the
-calling environment's managed identity.
+No subscription, resource-group, workspace identifier, or credential is stored in this
+public repository. Set the deployment target in the shell:
 
 ```bash
+export AZURE_SUBSCRIPTION_ID="<subscription-id>"
+export AZURE_RESOURCE_GROUP="<resource-group>"
+export AZURE_ML_WORKSPACE="<workspace-name>"
+export AZURE_ML_COMPUTE="gpu-t4-dedicated"
+export AZURE_LOCATION="spaincentral"
+
 az login
-az account set --subscription eb5c4bc0-bf07-4a49-b683-37be7d6f0e94
+az account set --subscription "$AZURE_SUBSCRIPTION_ID"
 az configure --defaults \
-  group=rg-rag-support-scorer \
-  workspace=aml-rag-support-scorer \
-  location=spaincentral
+  group="$AZURE_RESOURCE_GROUP" \
+  workspace="$AZURE_ML_WORKSPACE" \
+  location="$AZURE_LOCATION"
 ```
 
 ## Mandatory live preflight
 
+Run this only immediately before an Azure integration or study run:
+
 ```bash
-az ml compute list-sizes \
-  --location spaincentral \
-  --subscription eb5c4bc0-bf07-4a49-b683-37be7d6f0e94 \
-  --resource-group rg-rag-support-scorer \
-  --workspace-name aml-rag-support-scorer \
-  --query "[?name=='Standard_NV36ads_A10_v5' || name=='Standard_NC4as_T4_v3'].{name:name,supportedComputeTypes:supportedComputeTypes}" \
-  --output json
-
-az ml compute show \
-  --name gpu-t4-dedicated \
-  --subscription eb5c4bc0-bf07-4a49-b683-37be7d6f0e94 \
-  --resource-group rg-rag-support-scorer \
-  --workspace-name aml-rag-support-scorer \
-  --output table
-
 uv run python scripts/azure_preflight.py
 ```
 
-Observed on 2026-08-31:
-
-- `Standard_NC4as_T4_v3` supports `AmlCompute`; cluster `gpu-t4-dedicated`
-  has min 0, max 1, and 300-second idle timeout.
-- `Standard_NV36ads_A10_v5` reports only `MIR`, so Azure ML cluster creation
-  fails with `InvalidPropertyValue`.
-- raw-VM quota request `db2ba018-2a40-48ab-8f4c-8b11a55014e0` was
-  `PartiallyFulfilled` at 8 A10-family cores; the VM requires 36.
-
-The A10 path is unavailable, not ready-but-optional. Do not create an A10 cluster asset
-until both supported compute type and quota are revalidated.
+The preflight queries `az ml compute list-sizes` and fails unless
+`Standard_NC4as_T4_v3` supports `AmlCompute`. It also verifies the selected cluster.
+During implementation review on 2026-08-31, `Standard_NV36ads_A10_v5` exposed only
+`MIR`, not `AmlCompute`, and raw-VM A10 quota was 8 of the 36 required cores. The A10
+path is unavailable, not ready-but-optional.
 
 ## Validate and register assets
 
@@ -67,45 +47,59 @@ uv run --extra azure python scripts/validate_azure_assets.py
 
 az ml environment create \
   --file azure/environment/environment.yml \
-  --subscription eb5c4bc0-bf07-4a49-b683-37be7d6f0e94 \
-  --resource-group rg-rag-support-scorer \
-  --workspace-name aml-rag-support-scorer
+  --subscription "$AZURE_SUBSCRIPTION_ID" \
+  --resource-group "$AZURE_RESOURCE_GROUP" \
+  --workspace-name "$AZURE_ML_WORKSPACE"
 ```
 
-The T4 cluster already exists. Recreate it only if preflight confirms the same SKU:
+The T4 cluster should already exist. Recreate it only if preflight confirms the same
+SKU:
 
 ```bash
 az ml compute create \
   --file azure/compute/t4.yml \
-  --subscription eb5c4bc0-bf07-4a49-b683-37be7d6f0e94 \
-  --resource-group rg-rag-support-scorer \
-  --workspace-name aml-rag-support-scorer
+  --subscription "$AZURE_SUBSCRIPTION_ID" \
+  --resource-group "$AZURE_RESOURCE_GROUP" \
+  --workspace-name "$AZURE_ML_WORKSPACE"
 ```
 
 There is no SSH configuration. The cluster scales to zero.
 
-## Submit matched seeds
+## Required integration smoke
 
-Use fixed datastore paths so retrying the same seed sees `checkpoint-*` directories.
-The code resolves the highest checkpoint with `--resume auto`.
-
-Before full runs, submit one T4 integration smoke by setting `inputs.profile=smoke`,
-`inputs.sft_steps=1`, `inputs.grpo_steps=1`, and
-`inputs.evaluation_split=validation`. This is the required trainer-construction,
-adapter-dtype, generation, reward, and checkpoint check. Do not treat its metrics as a
-study result.
+Before full runs, submit one T4 integration smoke with `profile=smoke`, one SFT step,
+one GRPO step, and `validation` evaluation. This exercises the real trainer
+constructors, plural-image SFT collator, post-PEFT vision freeze, float16 adapter
+dtype, processor pixel cap, generation, rewards, and checkpoint writing. Its metrics
+are not study results.
 
 ```bash
-SUB=eb5c4bc0-bf07-4a49-b683-37be7d6f0e94
-RG=rg-rag-support-scorer
-WS=aml-rag-support-scorer
+az ml job create \
+  --file azure/pipeline.yml \
+  --subscription "$AZURE_SUBSCRIPTION_ID" \
+  --resource-group "$AZURE_RESOURCE_GROUP" \
+  --workspace-name "$AZURE_ML_WORKSPACE" \
+  --set inputs.profile=smoke \
+        inputs.seed=17 \
+        inputs.sft_steps=1 \
+        inputs.grpo_steps=1 \
+        inputs.evaluation_split=validation \
+  --stream
+```
 
+## Submit matched seeds
+
+Use fixed datastore paths so retrying a seed sees its `checkpoint-*` directories.
+Immutable run manifests reject seed, reward-arm, data, dependency, or optimizer config
+drift before resume.
+
+```bash
 for SEED in 17 29 43; do
   az ml job create \
     --file azure/pipeline.yml \
-    --subscription "$SUB" \
-    --resource-group "$RG" \
-    --workspace-name "$WS" \
+    --subscription "$AZURE_SUBSCRIPTION_ID" \
+    --resource-group "$AZURE_RESOURCE_GROUP" \
+    --workspace-name "$AZURE_ML_WORKSPACE" \
     --set inputs.seed="$SEED" \
           outputs.dataset.path="azureml://datastores/workspaceblobstore/paths/chart-provenance-rl/seed-$SEED/dataset" \
           outputs.model_snapshot.path="azureml://datastores/workspaceblobstore/paths/chart-provenance-rl/model/89644892e4d85e24eaac8bacfd4f463576704203" \
@@ -117,27 +111,36 @@ for SEED in 17 29 43; do
 done
 ```
 
-The environment, component versions, model revision, and source snapshot are
-immutable for a submitted job. MLflow records trainer scalars. Each GRPO adapter also
-contains `rollout_diagnostics.jsonl` with selected reward and hidden precision/joint
-metrics. Those rows are diagnostics, not statistical units.
+The pipeline evaluates the minimal adapter normally, with a neutral image, and with a
+deterministic derangement of held-out images. The latter two are the actual model
+leakage probes. The template-majority question-only baseline remains descriptive.
 
-Because the cluster max is one, GPU nodes queue. This is intentional cost control.
+## Confirmatory analysis
 
-## Analyze
+Concatenate each method's `question_metrics.jsonl` over seeds. Build the documented T4
+throughput JSON and concatenate naive/minimal `rollout_diagnostics.jsonl`, preserving
+their arm and seed fields. Then run:
 
-Download each job's `question_metrics.jsonl`, concatenate the same method across seeds,
-then run:
+The throughput artifact follows
+[`schemas/t4-throughput.schema.json`](../schemas/t4-throughput.schema.json): one row
+for each required seed and each of `sft`, `naive_recall`, and
+`minimal_provenance`, with terminal status, configured/completed steps, wall-clock
+seconds, run-manifest hash, and adapter-weight artifact hash.
 
 ```bash
-uv run chart-provenance analyze \
-  --treatment results/grpo-minimal.question-metrics.jsonl \
-  --control results/grpo-naive.question-metrics.jsonl \
-  --metric joint_exact \
-  --output results/primary-analysis.json
+uv run chart-provenance confirm \
+  --sft results/sft.jsonl \
+  --naive results/grpo-naive.jsonl \
+  --minimal results/grpo-minimal.jsonl \
+  --question-only results/grpo-minimal-question-only.jsonl \
+  --shuffled results/grpo-minimal-shuffled.jsonl \
+  --dataset-audit results/dataset-audit.json \
+  --throughput results/t4-throughput.json \
+  --rollout-diagnostics results/naive-rollouts.jsonl results/minimal-rollouts.jsonl \
+  --output results/confirmatory-report.json
 ```
 
-`azure/components/analyze.yml` provides the same analysis as an Azure command
-component when the two concatenated files are registered as immutable inputs. Analysis
-fails unless both files contain the same `(record_id, seed)` pairs and split, and each
-file contains exactly one distinct method label.
+The report is fail-closed. Missing artifacts produce `incomplete`; malformed,
+unmatched, wrong-seed, wrong-split, or wrong-method artifacts produce `fail`. Rollout
+rows are summarized as non-independent diagnostics and never mixed into paired
+question-level inference.

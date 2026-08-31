@@ -7,6 +7,7 @@ from chart_provenance_rl.decimal_utils import (
     canonical_decimal,
     parse_decimal,
 )
+from chart_provenance_rl.generation.renderer import render_chart
 from chart_provenance_rl.schema import (
     BenchmarkRecord,
     ChartType,
@@ -27,6 +28,10 @@ def test_decimal_canonicalization() -> None:
     assert parse_decimal(3) == Decimal(3)
     with pytest.raises(ValueError):
         parse_decimal("NaN")
+    with pytest.raises(ValueError, match="exponent"):
+        canonical_decimal("1e1000000")
+    with pytest.raises(ValueError, match="256 characters"):
+        parse_decimal("1" * 257)
 
 
 def test_schema_round_trip() -> None:
@@ -39,6 +44,7 @@ def test_schema_round_trip() -> None:
         comparison=ComparisonKind.EQUAL,
     )
     table_hash = sha256_json(table.to_dict())
+    rendered = render_chart(table, ChartType.TABLE, "classic")
     record = BenchmarkRecord(
         record_id="a" * 64,
         split="train",
@@ -61,8 +67,17 @@ def test_schema_round_trip() -> None:
         grammar_seed=1,
         config_seed=2,
         generation_index=0,
+        category_family="quarter",
+        series_family="finance",
+        target_series_index=0,
+        render_text=rendered.text_elements,
     )
     assert BenchmarkRecord.from_dict(record.to_dict()) == record
+    assert record.schema_version == "1.1"
+    legacy = record.to_dict()
+    legacy["schema_version"] = "1.0"
+    with pytest.raises(ValueError, match="Unsupported schema version"):
+        BenchmarkRecord.from_dict(legacy)
     assert TableData.from_dict(table.to_dict()) == table
     assert ProgramSpec.from_dict(program.to_dict()) == program
 

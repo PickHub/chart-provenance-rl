@@ -33,6 +33,13 @@ class ComparisonKind(StrEnum):
     EQUAL = "equal"
 
 
+class TextRole(StrEnum):
+    TITLE = "title"
+    CATEGORY = "category"
+    LEGEND = "legend"
+    VALUE = "value"
+
+
 @dataclass(frozen=True, order=True)
 class EvidenceRef:
     series: str
@@ -199,6 +206,65 @@ class ProgramResult:
 
 
 @dataclass(frozen=True)
+class RenderText:
+    role: TextRole
+    text: str
+    bbox: tuple[int, int, int, int]
+    foreground: str
+    background: str
+    contrast_ratio: Decimal
+    evidence: EvidenceRef | None = None
+
+    def __post_init__(self) -> None:
+        if not self.text:
+            raise ValueError("Rendered text must be non-empty")
+        left, top, right, bottom = self.bbox
+        if left < 0 or top < 0 or right <= left or bottom <= top:
+            raise ValueError(f"Invalid rendered text bounding box: {self.bbox}")
+        if self.contrast_ratio < 1:
+            raise ValueError("Rendered text contrast ratio must be at least 1")
+        if self.role is TextRole.VALUE and self.evidence is None:
+            raise ValueError("Rendered values require a semantic evidence reference")
+        if self.role is not TextRole.VALUE and self.evidence is not None:
+            raise ValueError("Only rendered values may carry evidence references")
+
+    def to_dict(self) -> dict[str, Any]:
+        result: dict[str, Any] = {
+            "role": self.role.value,
+            "text": self.text,
+            "bbox": list(self.bbox),
+            "foreground": self.foreground,
+            "background": self.background,
+            "contrast_ratio": canonical_decimal(self.contrast_ratio),
+        }
+        if self.evidence is not None:
+            result["evidence"] = self.evidence.to_dict()
+        return result
+
+    @classmethod
+    def from_dict(cls, value: JsonMapping) -> RenderText:
+        raw_bbox = value["bbox"]
+        if (
+            not isinstance(raw_bbox, list | tuple)
+            or len(raw_bbox) != 4
+            or not all(isinstance(coordinate, int) for coordinate in raw_bbox)
+        ):
+            raise TypeError("Rendered text bbox must contain four integers")
+        raw_evidence = value.get("evidence")
+        return cls(
+            role=TextRole(str(value["role"])),
+            text=str(value["text"]),
+            bbox=tuple(raw_bbox),
+            foreground=str(value["foreground"]),
+            background=str(value["background"]),
+            contrast_ratio=parse_decimal(value["contrast_ratio"]),
+            evidence=(
+                EvidenceRef.from_dict(_mapping(raw_evidence)) if raw_evidence is not None else None
+            ),
+        )
+
+
+@dataclass(frozen=True)
 class BenchmarkRecord:
     record_id: str
     split: str
@@ -216,6 +282,10 @@ class BenchmarkRecord:
     grammar_seed: int
     config_seed: int
     generation_index: int
+    category_family: str
+    series_family: str
+    target_series_index: int
+    render_text: tuple[RenderText, ...]
     tags: tuple[str, ...] = ()
     schema_version: str = SCHEMA_VERSION
 
@@ -227,6 +297,14 @@ class BenchmarkRecord:
                 raise ValueError(f"Invalid SHA-256 value: {hash_value!r}")
         if not self.question.strip() or not self.prompt.strip():
             raise ValueError("Question and prompt must be non-empty")
+        if not self.category_family or not self.series_family:
+            raise ValueError("Generator family labels must be non-empty")
+        if self.target_series_index not in range(len(self.table.series)):
+            raise ValueError("Target series index is outside the table")
+        if self.table.series[self.target_series_index] != self.program.series:
+            raise ValueError("Target series index does not identify the program series")
+        if not self.render_text:
+            raise ValueError("Rendered text metadata must be retained")
 
     def to_dict(self, *, include_record_id: bool = True) -> dict[str, Any]:
         result: dict[str, Any] = {
@@ -249,6 +327,10 @@ class BenchmarkRecord:
             "grammar_seed": self.grammar_seed,
             "config_seed": self.config_seed,
             "generation_index": self.generation_index,
+            "category_family": self.category_family,
+            "series_family": self.series_family,
+            "target_series_index": self.target_series_index,
+            "render_text": [element.to_dict() for element in self.render_text],
             "tags": list(self.tags),
         }
         if include_record_id:
@@ -284,6 +366,13 @@ class BenchmarkRecord:
             grammar_seed=int(value["grammar_seed"]),
             config_seed=int(value["config_seed"]),
             generation_index=int(value["generation_index"]),
+            category_family=str(value["category_family"]),
+            series_family=str(value["series_family"]),
+            target_series_index=int(value["target_series_index"]),
+            render_text=tuple(
+                RenderText.from_dict(_mapping(element))
+                for element in _mapping_list(value["render_text"], "render_text")
+            ),
             tags=tags,
         )
 
@@ -298,6 +387,12 @@ def _string_tuple(value: Any, field_name: str) -> tuple[str, ...]:
     if not isinstance(value, list | tuple) or not all(isinstance(item, str) for item in value):
         raise TypeError(f"{field_name} must contain strings")
     return tuple(value)
+
+
+def _mapping_list(value: Any, field_name: str) -> list[JsonMapping]:
+    if not isinstance(value, list):
+        raise TypeError(f"{field_name} must be a list")
+    return [_mapping(item) for item in value]
 
 
 def _optional_string(value: Any) -> str | None:

@@ -9,8 +9,14 @@ from chart_provenance_rl.analysis import compare_methods
 from chart_provenance_rl.audits import audit_dataset, load_dataset_records
 from chart_provenance_rl.constants import MODEL_ID
 from chart_provenance_rl.evaluation.attacks import attack_predictions
+from chart_provenance_rl.evaluation.confirmatory import (
+    run_confirmatory_analysis,
+)
 from chart_provenance_rl.evaluation.metrics import aggregate_predictions
 from chart_provenance_rl.evaluation.repair import repair_output
+from chart_provenance_rl.evaluation.rollouts import (
+    aggregate_rollout_diagnostics,
+)
 from chart_provenance_rl.generation.config import default_config, smoke_config
 from chart_provenance_rl.generation.generator import generate_dataset
 from chart_provenance_rl.schema import BenchmarkRecord
@@ -72,6 +78,28 @@ def _parser() -> argparse.ArgumentParser:
     analyze.add_argument("--metric", default="joint_exact")
     analyze.add_argument("--output", type=Path)
     analyze.set_defaults(handler=_analyze)
+
+    rollouts = subparsers.add_parser("aggregate-rollouts")
+    rollouts.add_argument("--input", type=Path, nargs="+", required=True)
+    rollouts.add_argument("--output", type=Path)
+    rollouts.set_defaults(handler=_aggregate_rollouts)
+
+    confirm = subparsers.add_parser("confirm")
+    confirm.add_argument("--sft", type=Path, required=True)
+    confirm.add_argument("--naive", type=Path, required=True)
+    confirm.add_argument("--minimal", type=Path, required=True)
+    confirm.add_argument("--question-only", type=Path, required=True)
+    confirm.add_argument("--shuffled", type=Path, required=True)
+    confirm.add_argument("--dataset-audit", type=Path, required=True)
+    confirm.add_argument("--throughput", type=Path, required=True)
+    confirm.add_argument(
+        "--rollout-diagnostics",
+        type=Path,
+        nargs="+",
+        required=True,
+    )
+    confirm.add_argument("--output", type=Path, required=True)
+    confirm.set_defaults(handler=_confirm)
 
     smoke = subparsers.add_parser("smoke")
     smoke.add_argument("--output", type=Path)
@@ -139,6 +167,28 @@ def _analyze(args: argparse.Namespace) -> dict[str, Any]:
     )
     if args.output:
         write_json(args.output, report)
+    return report
+
+
+def _aggregate_rollouts(args: argparse.Namespace) -> dict[str, Any]:
+    report = aggregate_rollout_diagnostics(args.input)
+    if args.output:
+        write_json(args.output, report)
+    return report
+
+
+def _confirm(args: argparse.Namespace) -> dict[str, Any]:
+    report = run_confirmatory_analysis(
+        sft_path=args.sft,
+        naive_path=args.naive,
+        minimal_path=args.minimal,
+        question_only_path=args.question_only,
+        shuffled_path=args.shuffled,
+        audit_path=args.dataset_audit,
+        throughput_path=args.throughput,
+        rollout_paths=args.rollout_diagnostics,
+    )
+    write_json(args.output, report)
     return report
 
 

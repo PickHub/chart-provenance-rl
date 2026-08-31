@@ -96,6 +96,64 @@ def test_malformed_and_cap_violations_receive_zero() -> None:
     assert score_reward(raw, "42", GOLD, RewardArm.NAIVE_RECALL).reward == 0.0
 
 
+@pytest.mark.parametrize(
+    "raw",
+    [
+        (
+            '{"answer":"42","evidence":['
+            '{"series":"Revenue","category":"Q3"},'
+            '{"series":"Revenue","category":"Q3"}]}'
+        ),
+        '{"answer":"42","evidence":[{"series":"Unknown","category":"Q3"}]}',
+        canonical_json(
+            {
+                "answer": "42",
+                "evidence": [
+                    {"series": f"S{index}", "category": f"C{index}"}
+                    for index in range(MAX_EVIDENCE_REFS + 1)
+                ],
+            }
+        ),
+        '{"answer":"42","evidence":[1]}',
+        '{"answer":"42","evidence":{}}',
+        '{"answer":"42","evidence":[],"unexpected":true}',
+    ],
+)
+def test_answer_exact_is_independent_of_invalid_evidence(raw: str) -> None:
+    breakdown = score_reward(
+        raw,
+        "42",
+        GOLD,
+        RewardArm.ANSWER_ONLY,
+        valid_evidence_refs=(EvidenceRef("Revenue", "Q3"),),
+    )
+    assert breakdown.answer_exact
+    assert breakdown.reward == 0.0
+    assert not breakdown.parsed.schema_valid
+
+
+def test_malformed_json_has_no_trustworthy_answer() -> None:
+    breakdown = score_reward(
+        '{"answer":"42","evidence":',
+        "42",
+        GOLD,
+        RewardArm.ANSWER_ONLY,
+    )
+    assert not breakdown.answer_exact
+    assert breakdown.reward == 0.0
+
+
+def test_extreme_numeric_answer_is_a_safe_non_match() -> None:
+    breakdown = score_reward(
+        '{"answer":"1e1000000","evidence":[]}',
+        "42",
+        GOLD,
+        RewardArm.ANSWER_ONLY,
+    )
+    assert not breakdown.answer_exact
+    assert breakdown.reward == 0.0
+
+
 def test_best_valid_provenance_set_is_used() -> None:
     alternatives = (
         (EvidenceRef("Revenue", "Q1"),),

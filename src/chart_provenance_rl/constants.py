@@ -1,6 +1,6 @@
 from pathlib import Path
 
-SCHEMA_VERSION = "1.0"
+SCHEMA_VERSION = "1.1"
 MODEL_ID = "Qwen/Qwen3-VL-2B-Instruct"
 MODEL_REVISION = "89644892e4d85e24eaac8bacfd4f463576704203"
 MODEL_LICENSE = "Apache-2.0"

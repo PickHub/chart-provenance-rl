@@ -135,6 +135,68 @@ def test_cli_repair_analysis_and_smoke(
     assert smoke["audit"]["status"] == "pass"
 
 
+def test_cli_rollout_and_confirmatory_commands_fail_closed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    rollout = tmp_path / "rollout.jsonl"
+    write_jsonl(
+        rollout,
+        [
+            {
+                "global_step": 0,
+                "record_id": "train-0",
+                "reward_arm": "naive_recall",
+                "seed": 17,
+                "run_manifest_sha256": "a" * 64,
+                "adapter_artifact_sha256": "b" * 64,
+                "reward_call_index": 0,
+                "completion_index": 0,
+                "selected_reward": 1.0,
+                "hidden_reward": 0.5,
+                "evidence_precision": 0.5,
+                "joint_exact": 0.0,
+            }
+        ],
+    )
+    summary = _run_cli(
+        monkeypatch,
+        capsys,
+        "aggregate-rollouts",
+        "--input",
+        str(rollout),
+    )
+    assert summary["row_count"] == 1
+    missing = tmp_path / "missing"
+    output = tmp_path / "confirm.json"
+    report = _run_cli(
+        monkeypatch,
+        capsys,
+        "confirm",
+        "--sft",
+        str(missing),
+        "--naive",
+        str(missing),
+        "--minimal",
+        str(missing),
+        "--question-only",
+        str(missing),
+        "--shuffled",
+        str(missing),
+        "--dataset-audit",
+        str(missing),
+        "--throughput",
+        str(missing),
+        "--rollout-diagnostics",
+        str(missing),
+        "--output",
+        str(output),
+    )
+    assert report["status"] == "incomplete"
+    assert output.is_file()
+
+
 def _run_cli(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],

@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from statistics import fmean
 from typing import Any
 
 from chart_provenance_rl.evaluation.parsing import completion_to_text
+from chart_provenance_rl.evaluation.provenance import is_sha256
 from chart_provenance_rl.evaluation.rewards import RewardArm, score_reward
 from chart_provenance_rl.serialization import canonical_json
 from chart_provenance_rl.training.data import (
@@ -18,7 +19,10 @@ from chart_provenance_rl.training.data import (
 @dataclass
 class TrainingReward:
     arm: RewardArm
+    seed: int
     rollout_log: Path | None = None
+    run_manifest_sha256: str | None = None
+    _call_index: int = field(default=0, init=False)
 
     @property
     def __name__(self) -> str:
@@ -38,6 +42,8 @@ class TrainingReward:
         **kwargs: Any,
     ) -> list[float]:
         del prompts, completion_ids, kwargs
+        if not is_sha256(self.run_manifest_sha256):
+            raise RuntimeError("Training reward must be bound to an immutable run manifest")
         lengths = {
             len(completions),
             len(expected_answer),
@@ -49,13 +55,21 @@ class TrainingReward:
             raise ValueError("TRL reward columns must align with completions")
         selected_rewards: list[float] = []
         rollout_rows: list[dict[str, Any]] = []
-        for completion, answer, provenance_json, evidence_json, question_id in zip(
-            completions,
-            expected_answer,
-            minimal_provenance_json,
-            valid_evidence_json,
-            record_id,
-            strict=True,
+        for completion_index, (
+            completion,
+            answer,
+            provenance_json,
+            evidence_json,
+            question_id,
+        ) in enumerate(
+            zip(
+                completions,
+                expected_answer,
+                minimal_provenance_json,
+                valid_evidence_json,
+                record_id,
+                strict=True,
+            )
         ):
             raw_output = completion_to_text(completion)
             provenance_sets = parse_provenance_sets(provenance_json)
@@ -87,6 +101,10 @@ class TrainingReward:
                     "global_step": int(trainer_state.global_step),
                     "record_id": question_id,
                     "reward_arm": self.arm.value,
+                    "seed": self.seed,
+                    "run_manifest_sha256": self.run_manifest_sha256,
+                    "reward_call_index": self._call_index,
+                    "completion_index": completion_index,
                     "selected_reward": selected.reward,
                     "naive_reward": naive.reward,
                     "hidden_reward": hidden.reward,
@@ -94,13 +112,14 @@ class TrainingReward:
                     "evidence_precision": hidden.evidence.precision,
                     "evidence_recall": hidden.evidence.recall,
                     "evidence_f1": hidden.evidence.f1,
-                    "joint_exact": hidden.answer_exact and hidden.evidence.exact,
+                    "joint_exact": float(hidden.answer_exact and hidden.evidence.exact),
                     "valid_schema": hidden.parsed.schema_valid,
                     "overcitation_count": hidden.overcitation_count,
                 }
             )
         self._log_rollouts(rollout_rows)
         self._log_mlflow(trainer_state, rollout_rows)
+        self._call_index += 1
         return selected_rewards
 
     def _log_rollouts(self, rows: list[dict[str, Any]]) -> None:

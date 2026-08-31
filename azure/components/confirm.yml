@@ -1,0 +1,42 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandComponent.schema.json
+name: chart_provenance_confirm
+version: "1"
+type: command
+display_name: Run fail-closed confirmatory analysis
+description: Evaluate every preregistered criterion from three-seed question and diagnostic artifacts.
+inputs:
+  sft:
+    type: uri_file
+  naive:
+    type: uri_file
+  minimal:
+    type: uri_file
+  question_only:
+    type: uri_file
+  shuffled:
+    type: uri_file
+  dataset_audit:
+    type: uri_file
+  throughput:
+    type: uri_file
+  naive_rollouts:
+    type: uri_file
+  minimal_rollouts:
+    type: uri_file
+outputs:
+  report:
+    type: uri_folder
+code: ../..
+environment: azureml:chart-provenance-rl-gpu:1
+command: >-
+  python -m pip install --no-deps . &&
+  python -m chart_provenance_rl.cli confirm
+  --sft ${{inputs.sft}}
+  --naive ${{inputs.naive}}
+  --minimal ${{inputs.minimal}}
+  --question-only ${{inputs.question_only}}
+  --shuffled ${{inputs.shuffled}}
+  --dataset-audit ${{inputs.dataset_audit}}
+  --throughput ${{inputs.throughput}}
+  --rollout-diagnostics ${{inputs.naive_rollouts}} ${{inputs.minimal_rollouts}}
+  --output ${{outputs.report}}/confirmatory-report.json

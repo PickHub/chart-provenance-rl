@@ -34,6 +34,10 @@ outputs:
     mode: upload
   grpo_minimal_results:
     mode: upload
+  minimal_question_only_results:
+    mode: upload
+  minimal_shuffled_results:
+    mode: upload
 settings:
   continue_on_step_failure: false
   default_datastore: azureml:workspaceblobstore
@@ -105,6 +109,7 @@ jobs:
       dataset: ${{parent.jobs.prepare.outputs.dataset}}
       model: ${{parent.jobs.prepare.outputs.model}}
       split: ${{parent.inputs.evaluation_split}}
+      image_mode: normal
   score_prompted:
     type: command
     component: ./components/score.yml
@@ -127,6 +132,7 @@ jobs:
       model: ${{parent.jobs.prepare.outputs.model}}
       adapter: ${{parent.jobs.sft.outputs.adapter}}
       split: ${{parent.inputs.evaluation_split}}
+      image_mode: normal
   score_sft:
     type: command
     component: ./components/score.yml
@@ -162,6 +168,7 @@ jobs:
       model: ${{parent.jobs.prepare.outputs.model}}
       adapter: ${{parent.jobs.grpo_answer.outputs.adapter}}
       split: ${{parent.inputs.evaluation_split}}
+      image_mode: normal
   score_grpo_answer:
     type: command
     component: ./components/score.yml
@@ -184,6 +191,7 @@ jobs:
       model: ${{parent.jobs.prepare.outputs.model}}
       adapter: ${{parent.jobs.grpo_naive.outputs.adapter}}
       split: ${{parent.inputs.evaluation_split}}
+      image_mode: normal
   score_grpo_naive:
     type: command
     component: ./components/score.yml
@@ -206,6 +214,7 @@ jobs:
       model: ${{parent.jobs.prepare.outputs.model}}
       adapter: ${{parent.jobs.grpo_minimal.outputs.adapter}}
       split: ${{parent.inputs.evaluation_split}}
+      image_mode: normal
   score_grpo_minimal:
     type: command
     component: ./components/score.yml
@@ -219,3 +228,49 @@ jobs:
       repair: false
     outputs:
       results: ${{parent.outputs.grpo_minimal_results}}
+  predict_minimal_question_only:
+    type: command
+    component: ./components/predict.yml
+    compute: azureml:gpu-t4-dedicated
+    inputs:
+      dataset: ${{parent.jobs.prepare.outputs.dataset}}
+      model: ${{parent.jobs.prepare.outputs.model}}
+      adapter: ${{parent.jobs.grpo_minimal.outputs.adapter}}
+      split: ${{parent.inputs.evaluation_split}}
+      image_mode: blank
+  score_minimal_question_only:
+    type: command
+    component: ./components/score.yml
+    compute: azureml:serverless
+    inputs:
+      dataset: ${{parent.jobs.prepare.outputs.dataset}}
+      predictions: ${{parent.jobs.predict_minimal_question_only.outputs.predictions}}
+      split: ${{parent.inputs.evaluation_split}}
+      method: grpo_minimal_question_only
+      seed: ${{parent.inputs.seed}}
+      repair: false
+    outputs:
+      results: ${{parent.outputs.minimal_question_only_results}}
+  predict_minimal_shuffled:
+    type: command
+    component: ./components/predict.yml
+    compute: azureml:gpu-t4-dedicated
+    inputs:
+      dataset: ${{parent.jobs.prepare.outputs.dataset}}
+      model: ${{parent.jobs.prepare.outputs.model}}
+      adapter: ${{parent.jobs.grpo_minimal.outputs.adapter}}
+      split: ${{parent.inputs.evaluation_split}}
+      image_mode: shuffled
+  score_minimal_shuffled:
+    type: command
+    component: ./components/score.yml
+    compute: azureml:serverless
+    inputs:
+      dataset: ${{parent.jobs.prepare.outputs.dataset}}
+      predictions: ${{parent.jobs.predict_minimal_shuffled.outputs.predictions}}
+      split: ${{parent.inputs.evaluation_split}}
+      method: grpo_minimal_image_shuffle
+      seed: ${{parent.inputs.seed}}
+      repair: false
+    outputs:
+      results: ${{parent.outputs.minimal_shuffled_results}}
