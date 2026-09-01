@@ -18,6 +18,22 @@ def training_prompt(question: str) -> list[dict[str, Any]]:
     ]
 
 
+def multimodal_messages(question: str, image: Any) -> list[dict[str, Any]]:
+    return [
+        {
+            "role": "system",
+            "content": [{"type": "text", "text": SYSTEM_PROMPT}],
+        },
+        {
+            "role": "user",
+            "content": [
+                {"type": "image", "image": image},
+                {"type": "text", "text": question},
+            ],
+        },
+    ]
+
+
 def training_completion(answer: str, evidence: tuple[EvidenceRef, ...]) -> list[dict[str, Any]]:
     content = canonical_json(
         {

@@ -10,8 +10,8 @@ from chart_provenance_rl.constants import (
     DEFAULT_IMAGE_SIZE,
     MODEL_ID,
     MODEL_REVISION,
-    SYSTEM_PROMPT,
 )
+from chart_provenance_rl.prompts import multimodal_messages
 
 
 @dataclass(frozen=True)
@@ -224,16 +224,7 @@ def model_stack_smoke(
     if trainable != trainable_summary.count:
         raise RuntimeError("Trainable parameter count changed during validation")
     image = Image.new("RGB", DEFAULT_IMAGE_SIZE, "white")
-    messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {
-            "role": "user",
-            "content": [
-                {"type": "image", "image": image},
-                {"type": "text", "text": "What is visible?"},
-            ],
-        },
-    ]
+    messages = multimodal_messages("What is visible?", image)
     inputs = stack.processor.apply_chat_template(
         messages,
         tokenize=True,

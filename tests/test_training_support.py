@@ -5,7 +5,9 @@ from typing import Any
 
 import pytest
 
+from chart_provenance_rl.constants import SYSTEM_PROMPT
 from chart_provenance_rl.evaluation.rewards import RewardArm
+from chart_provenance_rl.prompts import multimodal_messages
 from chart_provenance_rl.schema import EvidenceRef
 from chart_provenance_rl.serialization import sha256_file, write_json
 from chart_provenance_rl.training.artifacts import (
@@ -66,6 +68,18 @@ def test_sft_configuration_preserves_image_tokens(tmp_path: Path) -> None:
     assert config["max_length"] is None
     assert config["completion_only_loss"] is True
     assert config["fp16"] is True
+
+
+def test_direct_multimodal_messages_use_typed_content_blocks() -> None:
+    image = object()
+
+    messages = multimodal_messages("Question?", image)
+
+    assert messages[0]["content"] == [{"type": "text", "text": SYSTEM_PROMPT}]
+    assert messages[1]["content"] == [
+        {"type": "image", "image": image},
+        {"type": "text", "text": "Question?"},
+    ]
 
 
 def test_resume_checkpoint_resolution(tmp_path: Path) -> None:

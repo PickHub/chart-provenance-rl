@@ -12,9 +12,9 @@ from chart_provenance_rl.constants import (
     DEFAULT_IMAGE_SIZE,
     MODEL_ID,
     MODEL_REVISION,
-    SYSTEM_PROMPT,
 )
 from chart_provenance_rl.evaluation.leakage import image_shuffle_map
+from chart_provenance_rl.prompts import multimodal_messages
 from chart_provenance_rl.serialization import (
     load_json,
     sha256_file,
@@ -88,16 +88,7 @@ def predict(
             image_mode,
             shuffled_paths,
         )
-        messages = [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {
-                "role": "user",
-                "content": [
-                    {"type": "image", "image": rgb_image},
-                    {"type": "text", "text": record.question},
-                ],
-            },
-        ]
+        messages = multimodal_messages(record.question, rgb_image)
         inputs = stack.processor.apply_chat_template(
             messages,
             tokenize=True,
