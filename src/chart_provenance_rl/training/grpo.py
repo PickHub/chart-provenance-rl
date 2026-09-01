@@ -88,6 +88,7 @@ def train_grpo(
             "dataset_manifest_sha256": sha256_file(dataset_root / "dataset.json"),
             "quantization": "4bit-nf4-double-quant",
             "compute_dtype": "float16",
+            "trainable_parameter_dtype": "float32",
             "vision_frozen": True,
             "num_generations": 2,
             "temperature": 1.0,
@@ -118,7 +119,7 @@ def train_grpo(
         train_dataset=dataset,
         processing_class=stack.processor,
     )
-    enforce_trainable_parameter_dtype(trainer.model, torch.float16)
+    enforce_trainable_parameter_dtype(trainer.model, torch.float32)
     trainable = assert_frozen_vision_and_summarize(trainer.model)
     finalize_training_manifest(
         output_dir,

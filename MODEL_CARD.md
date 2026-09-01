@@ -43,8 +43,8 @@ No adapter is published and no run result exists yet.
 - two GRPO completions, maximum 256 completion tokens.
 
 TRL 0.26.2 internally casts QLoRA adapter parameters to bfloat16. The training entry
-points restore them to float16 after trainer construction and assert the resulting
-dtype before optimizer creation.
+points restore them to float32 after trainer construction and assert the resulting
+dtype before optimizer creation. Quantized-model compute remains float16.
 
 The processor uses a 196,608-pixel `longest_edge` cap in its `size` mapping. Model
 smoke validates the returned `image_grid_thw` against that cap. Training manifests

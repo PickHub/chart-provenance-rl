@@ -69,9 +69,9 @@ There is no SSH configuration. The cluster scales to zero.
 
 Before full runs, submit one T4 integration smoke with `profile=smoke`, one SFT step,
 one GRPO step, and `validation` evaluation. This exercises the real trainer
-constructors, plural-image SFT collator, post-PEFT vision freeze, float16 adapter
-dtype, processor pixel cap, generation, rewards, and checkpoint writing. Its metrics
-are not study results.
+constructors, plural-image SFT collator, post-PEFT vision freeze, float16 quantized-model
+compute with float32 adapter gradients, processor pixel cap, generation, rewards, and
+checkpoint writing. Its metrics are not study results.
 
 ```bash
 az ml job create \

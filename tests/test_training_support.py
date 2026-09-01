@@ -233,10 +233,10 @@ def test_trainable_adapter_dtype_is_enforced() -> None:
     parameter = _FakeParameter()
     count = enforce_trainable_parameter_dtype(
         SimpleNamespace(parameters=lambda: [parameter]),
-        "float16",
+        "float32",
     )
     assert count == 7
-    assert parameter.dtype == "float16"
+    assert parameter.dtype == "float32"
 
 
 def test_resume_manifest_rejects_config_drift(tmp_path: Path) -> None:

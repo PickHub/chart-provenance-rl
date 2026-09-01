@@ -156,9 +156,9 @@ commit `8c26b7d0e5f5ddc0ddea0d6b519ab30e437b8731` contains the Qwen3-VL QLoRA GR
 notebook used to lock the API.
 
 TRL 0.26.2 converts trainable QLoRA parameters to bfloat16 inside both trainer
-constructors. T4 does not provide native bfloat16, so this artifact converts trainable
-adapter parameters back to float16 after trainer construction and fails if the dtype
-check does not hold.
+constructors. T4 does not provide native bfloat16, and Accelerate cannot unscale FP16
+adapter gradients. This artifact restores trainable adapters to FP32 while retaining
+FP16 quantized-model compute, then fails if the dtype check does not hold.
 
 Qwen3-VL's processor cap is set through
 `image_processor.size["longest_edge"]`, not an inert `max_pixels` attribute. Model

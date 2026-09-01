@@ -219,7 +219,7 @@ def model_stack_smoke(
         raise RuntimeError("Model smoke requires a fresh LoRA configuration")
     model = get_peft_model(stack.model, stack.peft_config)
     freeze_vision_tower(model)
-    trainable = enforce_trainable_parameter_dtype(model, torch.float16)
+    trainable = enforce_trainable_parameter_dtype(model, torch.float32)
     trainable_summary = assert_frozen_vision_and_summarize(model)
     if trainable != trainable_summary.count:
         raise RuntimeError("Trainable parameter count changed during validation")
@@ -256,6 +256,7 @@ def model_stack_smoke(
         "model_revision": MODEL_REVISION,
         "quantization": "4bit-nf4-double-quant",
         "compute_dtype": "float16",
+        "trainable_parameter_dtype": "float32",
         "lora_target_modules": ["q_proj", "v_proj"],
         "lora_rank": 8,
         "vision_frozen": True,

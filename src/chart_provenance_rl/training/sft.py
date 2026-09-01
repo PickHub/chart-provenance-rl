@@ -64,6 +64,7 @@ def train_sft(
             "dataset_manifest_sha256": sha256_file(dataset_root / "dataset.json"),
             "quantization": "4bit-nf4-double-quant",
             "compute_dtype": "float16",
+            "trainable_parameter_dtype": "float32",
             "vision_frozen": True,
             "lora_rank": 8,
             "lora_target_modules": ["q_proj", "v_proj"],
@@ -81,7 +82,7 @@ def train_sft(
         processing_class=stack.processor,
         peft_config=stack.peft_config,
     )
-    enforce_trainable_parameter_dtype(trainer.model, torch.float16)
+    enforce_trainable_parameter_dtype(trainer.model, torch.float32)
     trainable = assert_frozen_vision_and_summarize(trainer.model)
     finalize_training_manifest(
         output_dir,
