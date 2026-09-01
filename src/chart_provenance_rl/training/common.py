@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any
@@ -25,6 +26,13 @@ GPU_PACKAGES = (
     "trl",
 )
 RUN_MANIFEST = "run_manifest.json"
+
+
+def configure_transformers_mlflow() -> None:
+    if "MLFLOW_TRACKING_URI" not in os.environ:
+        return
+    os.environ["MLFLOW_FLATTEN_PARAMS"] = "TRUE"
+    os.environ["MLFLOW_MAX_LOG_PARAMS"] = "100"
 
 
 def resolve_resume_checkpoint(output_dir: Path, value: str) -> str | None:

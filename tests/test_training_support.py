@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -14,6 +15,7 @@ from chart_provenance_rl.training.artifacts import (
 )
 from chart_provenance_rl.training.common import (
     build_immutable_training_manifest,
+    configure_transformers_mlflow,
     finalize_training_manifest,
     resolve_resume_checkpoint,
     source_tree_sha256,
@@ -471,3 +473,29 @@ class _FakeModel:
 
     def named_parameters(self) -> tuple[tuple[str, _FakeParameter], ...]:
         return self._parameters
+
+
+def test_configure_transformers_mlflow_bounds_azure_parameters(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("MLFLOW_TRACKING_URI", "azureml://example")
+    monkeypatch.setenv("MLFLOW_FLATTEN_PARAMS", "FALSE")
+    monkeypatch.setenv("MLFLOW_MAX_LOG_PARAMS", "1000")
+
+    configure_transformers_mlflow()
+
+    assert os.environ["MLFLOW_FLATTEN_PARAMS"] == "TRUE"
+    assert os.environ["MLFLOW_MAX_LOG_PARAMS"] == "100"
+
+
+def test_configure_transformers_mlflow_is_inert_without_tracking(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("MLFLOW_TRACKING_URI", raising=False)
+    monkeypatch.delenv("MLFLOW_FLATTEN_PARAMS", raising=False)
+    monkeypatch.delenv("MLFLOW_MAX_LOG_PARAMS", raising=False)
+
+    configure_transformers_mlflow()
+
+    assert "MLFLOW_FLATTEN_PARAMS" not in os.environ
+    assert "MLFLOW_MAX_LOG_PARAMS" not in os.environ

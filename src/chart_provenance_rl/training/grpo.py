@@ -17,6 +17,7 @@ from chart_provenance_rl.training.artifacts import (
 from chart_provenance_rl.training.common import (
     RUN_MANIFEST,
     build_immutable_training_manifest,
+    configure_transformers_mlflow,
     finalize_training_manifest,
     resolve_resume_checkpoint,
     validate_resume_manifest,
@@ -59,6 +60,7 @@ def train_grpo(
     import torch
     from trl import GRPOConfig, GRPOTrainer
 
+    configure_transformers_mlflow()
     if not (sft_adapter / "adapter_config.json").is_file():
         raise FileNotFoundError(f"GRPO arms must start from the same SFT adapter: {sft_adapter}")
     sft_manifest = sft_adapter / RUN_MANIFEST

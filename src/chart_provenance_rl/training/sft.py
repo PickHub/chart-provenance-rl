@@ -10,6 +10,7 @@ from chart_provenance_rl.training.artifacts import (
 )
 from chart_provenance_rl.training.common import (
     build_immutable_training_manifest,
+    configure_transformers_mlflow,
     finalize_training_manifest,
     resolve_resume_checkpoint,
     validate_resume_manifest,
@@ -47,6 +48,7 @@ def train_sft(
     import torch
     from trl import SFTConfig, SFTTrainer
 
+    configure_transformers_mlflow()
     output_dir.mkdir(parents=True, exist_ok=True)
     config_kwargs = sft_config_kwargs(
         output_dir,
