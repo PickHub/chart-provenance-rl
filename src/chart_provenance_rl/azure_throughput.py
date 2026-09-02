@@ -323,9 +323,7 @@ def _validate_collected_runs(runs: list[dict[str, Any]]) -> None:
         raise ValueError(f"Azure evidence does not cover required runs: {observed_pairs}")
     for stage in ("sft", "naive_recall", "minimal_provenance"):
         config_hashes = {
-            run["seed_invariant_training_config_sha256"]
-            for run in runs
-            if run["stage"] == stage
+            run["seed_invariant_training_config_sha256"] for run in runs if run["stage"] == stage
         }
         if len(config_hashes) != 1:
             raise ValueError(f"{stage} training config differs across seeds")
