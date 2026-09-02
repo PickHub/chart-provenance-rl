@@ -50,6 +50,10 @@ def test_collector_binds_live_jobs_compute_times_and_artifacts(
     assert all(run["wall_seconds"] == 3600 for run in report["runs"])
     assert all(run["source_sha256"] == "a" * 64 for run in report["runs"])
     assert all(run["dataset_manifest_sha256"] == "b" * 64 for run in report["runs"])
+    for stage in ("sft", "naive_recall", "minimal_provenance"):
+        stage_runs = [run for run in report["runs"] if run["stage"] == stage]
+        assert len({run["training_config_sha256"] for run in stage_runs}) == 3
+        assert len({run["seed_invariant_training_config_sha256"] for run in stage_runs}) == 1
     unsigned = {key: value for key, value in report.items() if key != "collection_sha256"}
     assert report["collection_sha256"] == sha256_json(unsigned)
     assert json.loads(output.read_text()) == report
@@ -342,7 +346,11 @@ def _artifact(
                 "source_sha256": "a" * 64,
                 "dataset_manifest_sha256": "b" * 64,
                 "training_config": (
-                    {"loss_type": "sft"} if stage == "sft" else {"loss_type": "dr_grpo"}
+                    {
+                        "seed": seed,
+                        "data_seed": seed,
+                        "loss_type": "sft" if stage == "sft" else "dr_grpo",
+                    }
                 ),
             },
             "trainable_parameters": {

@@ -1,0 +1,45 @@
+{
+  "schema_version": "1.0",
+  "analysis_kind": "post_hoc_manipulation_check",
+  "inferential_status": "descriptive_only",
+  "source_artifacts": [
+    "grpo-naive.rollout-diagnostics.jsonl",
+    "grpo-minimal.rollout-diagnostics.jsonl"
+  ],
+  "total_rollout_rows": 9600,
+  "rollout_rows_per_arm": 4800,
+  "two_completion_groups_per_arm": 2400,
+  "varying_reward_groups_per_arm": 10,
+  "varying_reward_group_rate": 0.004166666666666667,
+  "reward_definition_disagreement_rows": 0,
+  "overcitation_rows": 0,
+  "initial_rollout_rows": 96,
+  "initial_hidden_joint_exact_rate": 1.0,
+  "mean_hidden_joint_exact": 0.9979021990740741,
+  "by_seed": [
+    {
+      "seed": 17,
+      "rollout_rows_per_arm": 1600,
+      "two_completion_groups_per_arm": 800,
+      "varying_reward_groups_per_arm": 2,
+      "varying_reward_group_rate": 0.0025,
+      "mean_hidden_joint_exact": 0.9986979166666666
+    },
+    {
+      "seed": 29,
+      "rollout_rows_per_arm": 1600,
+      "two_completion_groups_per_arm": 800,
+      "varying_reward_groups_per_arm": 3,
+      "varying_reward_group_rate": 0.00375,
+      "mean_hidden_joint_exact": 0.9981192129629629
+    },
+    {
+      "seed": 43,
+      "rollout_rows_per_arm": 1600,
+      "two_completion_groups_per_arm": 800,
+      "varying_reward_groups_per_arm": 5,
+      "varying_reward_group_rate": 0.00625,
+      "mean_hidden_joint_exact": 0.9968894675925926
+    }
+  ]
+}

@@ -273,6 +273,9 @@ def _run_evidence(
         "git_commit": git_commit,
         "dataset_manifest_sha256": dataset_sha256,
         "training_config_sha256": sha256_json(training_config),
+        "seed_invariant_training_config_sha256": sha256_json(
+            _seed_invariant_training_config(training_config)
+        ),
         "run_manifest_sha256": sha256_file(manifest_path),
         "adapter_artifact_sha256": validate_adapter_artifact(artifact_dir),
     }
@@ -319,7 +322,11 @@ def _validate_collected_runs(runs: list[dict[str, Any]]) -> None:
     if observed_pairs != expected_pairs:
         raise ValueError(f"Azure evidence does not cover required runs: {observed_pairs}")
     for stage in ("sft", "naive_recall", "minimal_provenance"):
-        config_hashes = {run["training_config_sha256"] for run in runs if run["stage"] == stage}
+        config_hashes = {
+            run["seed_invariant_training_config_sha256"]
+            for run in runs
+            if run["stage"] == stage
+        }
         if len(config_hashes) != 1:
             raise ValueError(f"{stage} training config differs across seeds")
     for seed in REQUIRED_SEEDS:
@@ -330,6 +337,10 @@ def _validate_collected_runs(runs: list[dict[str, Any]]) -> None:
         }
         if len(grpo_configs) != 1:
             raise ValueError(f"Naive/minimal training config differs for seed {seed}")
+
+
+def _seed_invariant_training_config(config: dict[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in config.items() if key not in {"seed", "data_seed"}}
 
 
 def _find_child(

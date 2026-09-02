@@ -135,6 +135,8 @@ naive, and minimal child jobs on the configured AmlCompute cluster, checks the l
 cluster SKU, derives wall time from Azure timestamps, downloads each child artifact,
 validates adapter weights, and records source/config/data/run/adapter hashes. Missing,
 nonterminal, wrong-seed, wrong-compute, or mismatched evidence aborts collection.
+Full training-config hashes retain each run's seed. A second hash removes only `seed`
+and `data_seed` when checking that all other configuration is identical across seeds.
 
 The resulting artifact follows
 [`schemas/t4-throughput.schema.json`](../schemas/t4-throughput.schema.json). It stores

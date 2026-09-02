@@ -99,6 +99,7 @@
           "git_commit",
           "dataset_manifest_sha256",
           "training_config_sha256",
+          "seed_invariant_training_config_sha256",
           "run_manifest_sha256",
           "adapter_artifact_sha256"
         ],
@@ -161,6 +162,10 @@
             "pattern": "^[0-9a-f]{64}$"
           },
           "training_config_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "seed_invariant_training_config_sha256": {
             "type": "string",
             "pattern": "^[0-9a-f]{64}$"
           },

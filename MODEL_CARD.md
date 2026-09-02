@@ -16,9 +16,9 @@ These fields were verified against the live Hugging Face API. Azure preparation
 downloads that exact snapshot and writes SHA-256 and size metadata for every model
 file.
 
-## Planned derivatives
+## Derivatives
 
-The pipeline can produce:
+The completed three-seed pipeline produced:
 
 - one completion-only SFT adapter per seed;
 - answer-only, naive-recall, and minimal-provenance online-GRPO adapters initialized
@@ -27,7 +27,8 @@ The pipeline can produce:
 The answer-only arm is still strict-contract gated: malformed or citation-invalid JSON
 receives zero even when its recoverable answer string is correct.
 
-No adapter is published and no run result exists yet.
+Adapters remain in private Azure storage and are not published. Passage-free and
+image-free aggregate results are published under `artifacts/releases/2026-09-02`.
 
 ## Adaptation
 
@@ -70,9 +71,9 @@ metrics and statistical procedures are fixed in
 
 ## Limitations
 
-Results, once available, apply only to the pinned model, adapter regime, synthetic
-generator, and compute budget. Explicit citation does not prove internal visual
-grounding. See [`docs/limitations.md`](docs/limitations.md).
+The failed confirmatory result applies only to the pinned model, adapter regime,
+synthetic generator, and compute budget. Explicit citation does not prove internal
+visual grounding. See [`docs/limitations.md`](docs/limitations.md).
 
 ## License
 

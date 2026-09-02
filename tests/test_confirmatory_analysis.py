@@ -619,6 +619,9 @@ def _throughput_report() -> dict[str, Any]:
                 "source_sha256": "7" * 64,
                 "dataset_manifest_sha256": "d" * 64,
                 "training_config_sha256": ("8" * 64 if stage == "sft" else "9" * 64),
+                "seed_invariant_training_config_sha256": (
+                    "a" * 64 if stage == "sft" else "b" * 64
+                ),
                 "run_manifest_sha256": _run_hash_for_stage(
                     stage,
                     seed,

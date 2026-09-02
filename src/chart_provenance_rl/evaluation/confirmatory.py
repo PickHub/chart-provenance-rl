@@ -489,6 +489,7 @@ def _validate_throughput(
             or run.get("git_commit") != git_commit
             or run.get("dataset_manifest_sha256") != dataset_sha256
             or not is_sha256(run.get("training_config_sha256"))
+            or not is_sha256(run.get("seed_invariant_training_config_sha256"))
             or not _valid_time_range(run)
         ):
             raise ValueError("Throughput child-job evidence is invalid")

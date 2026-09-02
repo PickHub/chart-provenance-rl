@@ -6,9 +6,8 @@ matched online group-relative experiment for measuring that reward indifference.
 generates charts from typed tables and executable programs, asks for an answer plus
 visible semantic evidence, and compares recall with minimal-provenance F1.
 
-The intended result is a controlled comparison of reward definitions, not a generic
-chart demo, independent causal visual-grounding evidence, or a claim that a model has
-already improved.
+The result is a controlled comparison of reward definitions, not a generic chart demo
+or independent causal visual-grounding evidence.
 
 ## Status
 
@@ -17,11 +16,27 @@ already improved.
 | Deterministic bar, line, and table-like chart generator | Implemented |
 | Executable programs, minimal provenance sets, OOD and stress splits | Implemented |
 | Hard JSON parser, three reward arms, attacks, metrics, and statistics | Implemented |
-| Qwen3-VL QLoRA SFT, online GRPO, inference, and checkpoint resume | Implemented, model construction still requires GPU validation |
-| Azure ML v2 components and one-seed pipeline | SDK schema-validated |
-| Real SFT/GRPO runs and scientific results | **Not run** |
+| Qwen3-VL QLoRA SFT, online GRPO, inference, and checkpoint resume | Implemented and T4-validated |
+| Azure ML v2 components and one-seed pipeline | Three seeds completed |
+| Real SFT/GRPO runs and scientific results | **Complete; preregistered hypothesis failed** |
 
 The CPU smoke output is synthetic evaluator validation. It is not model evidence.
+
+## Confirmatory outcome
+
+Minimal-provenance GRPO, naive-recall GRPO, and SFT each reached 2.78% joint exact on
+held-out program compositions. The minimal-minus-naive difference was zero, with a 95%
+bootstrap interval of `[0, 0]` and `p = 1.0`.
+
+The manipulation check failed before the outcome comparison could be informative:
+across 9,600 online rollouts, no sample overcited and the naive and minimal reward
+definitions never disagreed. All initial rollouts were hidden-joint exact, and mean
+atomic training-rollout joint exact remained approximately 99.8%, leaving almost no
+group-relative learning signal.
+
+This is a negative result, not evidence that minimality rewards work or fail generally.
+See the [technical report](docs/confirmatory-result-2026-09-02.md) and
+[passage/image-free evidence bundle](artifacts/releases/2026-09-02/README.md).
 
 ## Quick start
 

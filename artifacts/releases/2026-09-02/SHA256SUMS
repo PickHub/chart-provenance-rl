@@ -1,0 +1,15 @@
+a470b09aa6691158902d91d3c4ae023578d11207238931bc9d0aa61a9287767e  ./README.md
+6d8489e1c3eca3eb920701d1f648b80c55f44b94c2a798a2dd421313a5ecfb0c  ./confirmatory-report.json
+20071a97256590f9859dcb5a622962cd85ffa5cbce219e77435096ff6e53bb36  ./dataset-audit.json
+6a1ac580416b5c3021b0ecc48b1009accd5538a701b58274fd11f56f52f99119  ./grpo-answer-only.question-metrics.jsonl
+e0d1d23b559bc7f9ae75d90c855b9e7368b4fa5737dd9dfbe96600dd09b51dc6  ./grpo-minimal-question-only.question-metrics.jsonl
+6603478535ce033bce5cb6d2eab602bc345a043dc8efb34f0c89792522eb4983  ./grpo-minimal-shuffled.question-metrics.jsonl
+b55de2cd48f6fc81a599e83fbd164d76ca8512e38867d019c97e696281b5c71f  ./grpo-minimal.question-metrics.jsonl
+749ffbe89b06a143839d4fc303ba23f94df802a3672c72d40c9b9112ead13260  ./grpo-minimal.rollout-diagnostics.jsonl
+02f8f20434e07666242ddb3261a8b90a6cced9c8e8ad2a29642aca3937cb26b2  ./grpo-naive.question-metrics.jsonl
+4e7d18bc6524e1fb8a7983d1fbb7281608ec2ac272ab59327a96b9e2de350ac8  ./grpo-naive.rollout-diagnostics.jsonl
+33b670e4a2fc80537846bb959c16f8938fe2182ecf9fc1146f0b8afc6d209573  ./manipulation-check.json
+f78fb1a72a2560ed040b1067e9bee23d9fbd09d75da9584bce5f991bdaecb099  ./prompted-frozen.question-metrics.jsonl
+9bb8fa7a7d094e61cfdc42ff63e17460f22af28ac311924d15d7ed5d3ac3e383  ./sft-json-repair.question-metrics.jsonl
+56210db8b1a5ab664e1902f66e17bfc35d4987d9e1cc2fe8786e84e5e8f09690  ./sft.question-metrics.jsonl
+2ca932df46d54f7e1b8711bc65cf65eb9bca4e6a2010f3cb95aa8cecc73a51c0  ./t4-throughput.json
